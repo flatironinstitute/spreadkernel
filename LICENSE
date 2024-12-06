@@ -1,0 +1,43 @@
+Copyright (C) 2017-2024 The Simons Foundation, Inc. - All Rights Reserved.
+
+This software is heavily derived from the 'finufft' library
+
+https://github.com/flatironinstitute/finufft
+
+and follows the same licensing.
+
+The code here is essentially a hard fork of the spreader used there.  Therefore
+any code contributions there also follow here. Major contributions to the code
+from which this project is derived are largely attributed to
+
+* Alex Barnett - finufft maintainer/creator and general numerical guru
+* Robert Blackwell - atomic OMP add_wrapped_subgrid, and creating this project
+* Jeremy Magland - early multithreaded spreader
+* Ludvig af Klinteberg - SIMD vectorization/acceleration of spreader
+* Melody Shih - Re-organization of spreader components
+* Libin Lu - SIMD kernel
+* Marco Barbone - SIMD kernel manual vectorization
+* Wenda Zhou - SIMD ideas, and SIMD code I hope to incorporate
+* Martin Reinecke - SIMD kernel and interp auto-vectorization, binsort
+
+------
+
+SPREADKERNEL is licensed under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance with the
+License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+------
+
+If you find this library useful, or it helps you in creating software
+or publications, please let us know, and acknowledge that fact by citing our
+source repository:
+
+  https://github.com/flatironinstitute/spreadkernel
