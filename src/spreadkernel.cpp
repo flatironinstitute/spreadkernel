@@ -14,13 +14,9 @@
 #include "ker_horner_allw_loop_constexpr.h"
 #include "ker_lowupsampfac_horner_allw_loop_constexpr.h"
 
-inline constexpr int TF_OMIT_SPREADING            = 0;
-inline constexpr int TF_OMIT_WRITE_TO_GRID        = 0;
-inline constexpr int TF_OMIT_EVALUATE_KERNEL      = 0;
-inline constexpr int TF_OMIT_EVALUATE_EXPONENTIAL = 0;
-inline constexpr double EPSILON                   = std::numeric_limits<double>::epsilon();
-inline constexpr int MIN_NSPREAD                  = 2;
-inline constexpr int MAX_NSPREAD                  = 16;
+inline constexpr double EPSILON  = std::numeric_limits<double>::epsilon();
+inline constexpr int MIN_NSPREAD = 2;
+inline constexpr int MAX_NSPREAD = 16;
 #ifndef M_PI // Windows apparently doesn't have this const
 inline constexpr M_PI 3.14159265358979329
 #endif
@@ -32,93 +28,6 @@ inline constexpr M_PI 3.14159265358979329
     using BIGINT = int64_t;
 using UBIGINT    = uint64_t;
 using FLT        = double;
-
-#ifdef _OPENMP
-#include <omp.h>
-// point to actual omp utils
-static inline int MY_OMP_GET_NUM_THREADS() { return omp_get_num_threads(); }
-static inline int MY_OMP_GET_MAX_THREADS() { return omp_get_max_threads(); }
-static inline int MY_OMP_GET_THREAD_NUM() { return omp_get_thread_num(); }
-static inline void MY_OMP_SET_NUM_THREADS(int x) { omp_set_num_threads(x); }
-#else
-// non-omp safe dummy versions of omp utils...
-static inline int MY_OMP_GET_NUM_THREADS() { return 1; }
-static inline int MY_OMP_GET_MAX_THREADS() { return 1; }
-static inline int MY_OMP_GET_THREAD_NUM() { return 0; }
-static inline void MY_OMP_SET_NUM_THREADS(int) {}
-#endif
-
-#if defined(_MSC_VER)
-#define SPREADKERNEL_ALWAYS_INLINE __forceinline inline
-#define SPREADKERNEL_NEVER_INLINE  __declspec(noinline)
-#define SPREADKERNEL_RESTRICT      __restrict
-#define SPREADKERNEL_UNREACHABLE   __assume(0)
-#define SPREADKERNEL_UNLIKELY(x)   (x)
-#define SPREADKERNEL_LIKELY(x)     (x)
-#elif defined(__GNUC__) || defined(__clang__)
-#define SPREADKERNEL_ALWAYS_INLINE __attribute__((always_inline)) inline
-#define SPREADKERNEL_NEVER_INLINE  __attribute__((noinline))
-#define SPREADKERNEL_RESTRICT      __restrict__
-#define SPREADKERNEL_UNREACHABLE   __builtin_unreachable()
-#define SPREADKERNEL_UNLIKELY(x)   __builtin_expect(!!(x), 0)
-#define SPREADKERNEL_LIKELY(x)     __builtin_expect(!!(x), 1)
-#else
-#define SPREADKERNEL_ALWAYS_INLINE inline
-#define SPREADKERNEL_NEVER_INLINE
-#define SPREADKERNEL_RESTRICT
-#define SPREADKERNEL_UNREACHABLE
-#define SPREADKERNEL_UNLIKELY(x) (x)
-#define SPREADKERNEL_LIKELY(x)   (x)
-#endif
-
-enum {
-    SPREADKERNEL_WARN_EPS_TOO_SMALL         = 1,
-    SPREADKERNEL_ERR_MAXNALLOC              = 2,
-    SPREADKERNEL_ERR_SPREAD_BOX_SMALL       = 3,
-    SPREADKERNEL_ERR_SPREAD_PTS_OUT_RANGE   = 4, // DEPRECATED
-    SPREADKERNEL_ERR_SPREAD_ALLOC           = 5,
-    SPREADKERNEL_ERR_SPREAD_DIR             = 6,
-    SPREADKERNEL_ERR_UPSAMPFAC_TOO_SMALL    = 7,
-    SPREADKERNEL_ERR_HORNER_WRONG_BETA      = 8,
-    SPREADKERNEL_ERR_NTRANS_NOTVALID        = 9,
-    SPREADKERNEL_ERR_TYPE_NOTVALID          = 10,
-    SPREADKERNEL_ERR_ALLOC                  = 11,
-    SPREADKERNEL_ERR_DIM_NOTVALID           = 12,
-    SPREADKERNEL_ERR_SPREAD_THREAD_NOTVALID = 13,
-    SPREADKERNEL_ERR_NDATA_NOTVALID         = 14,
-    SPREADKERNEL_ERR_CUDA_FAILURE           = 15,
-    SPREADKERNEL_ERR_PLAN_NOTVALID          = 16,
-    SPREADKERNEL_ERR_METHOD_NOTVALID        = 17,
-    SPREADKERNEL_ERR_BINSIZE_NOTVALID       = 18,
-    SPREADKERNEL_ERR_INSUFFICIENT_SHMEM     = 19,
-    SPREADKERNEL_ERR_NUM_NU_PTS_INVALID     = 20,
-    SPREADKERNEL_ERR_INVALID_ARGUMENT       = 21,
-    SPREADKERNEL_ERR_LOCK_FUNS_INVALID      = 22
-};
-
-typedef struct spreadkernel_opts {
-    // See spreadinterp:setup_spreader for default values of the following fields.
-    // This is the main documentation for these options...
-    int nspread;             // w, the kernel width in grid pts
-    int spread_direction;    // 1 means spread NU->U, 2 means interpolate U->NU
-    int chkbnds;             // [DEPRECATED] 0: don't check NU pts in 3-period range; 1: do
-    int sort;                // 0: don't sort NU pts, 1: do, 2: heuristic choice
-    int kerevalmeth;         // 0: direct exp(sqrt()), or 1: Horner ppval, fastest
-    int kerpad;              // 0: no pad w to mult of 4, 1: do pad
-                             // (this helps SIMD for kerevalmeth=0, eg on i7).
-    int nthreads;            // # threads for spreadinterp (0: use max avail)
-    int sort_threads;        // # threads for sort (0: auto-choice up to nthreads)
-    int max_subproblem_size; // # pts per t1 subprob; sets extra RAM per thread
-    int flags;               // binary flags for timing only (may give wrong ans
-                             // if changed from 0!). See spreadinterp.h
-    int debug;               // 0: silent, 1: small text output, 2: verbose
-    int atomic_threshold;    // num threads before switching spreadSorted to using atomic ops
-    double upsampfac;        // sigma, upsampling factor
-    // ES kernel specific consts for eval. No longer FLT, to avoid name clash...
-    double ES_beta;
-    double ES_halfwidth;
-    double ES_c;
-} finufft_spread_opts;
 
 namespace spreadkernel {
 
@@ -180,6 +89,7 @@ SPREADKERNEL_NEVER_INLINE
 void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
                         UBIGINT size2, UBIGINT size3, UBIGINT M0);
 } // namespace
+
 // declarations of purely internal functions... (thus need not be in .h)
 template<uint8_t ns, uint8_t kerevalmeth, class T,
          class simd_type = xsimd::make_sized_batch_t<T, find_optimal_simd_width<T, ns>()>, typename... V>
@@ -214,13 +124,12 @@ void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBI
                           double bin_size_x, double bin_size_y, double bin_size_z, int debug, int nthr);
 static void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padded_size1, BIGINT &size1,
                         BIGINT &size2, BIGINT &size3, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, int ns, int ndims);
-int spreadcheck(UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, const spreadkernel_opts &opts);
-int index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
-               const spreadkernel_opts &opts);
+bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
+                const spreadkernel_opts &opts);
 int spread_sorted(const BIGINT *sort_indices, const UBIGINT N1, const UBIGINT N2, const UBIGINT N3, FLT *data_uniform,
                   const UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx, FLT *SPREADKERNEL_RESTRICT ky,
                   FLT *SPREADKERNEL_RESTRICT kz, FLT *SPREADKERNEL_RESTRICT data_nonuniform,
-                  const spreadkernel_opts &opts, int did_sort);
+                  const spreadkernel_opts &opts, bool did_sort);
 
 template<typename T, std::size_t N, std::size_t M, std::size_t PaddedM>
 constexpr std::array<std::array<T, PaddedM>, N> pad_2D_array_with_zeros(
@@ -252,87 +161,6 @@ void arrayrange(BIGINT n, FLT *a, FLT *lo, FLT *hi)
     }
 }
 
-// ==========================================================================
-int spreadinterp(UBIGINT N1, UBIGINT N2, UBIGINT N3, FLT *data_uniform, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
-                 FLT *data_nonuniform, const spreadkernel_opts &opts)
-/* ------------Spreader/interpolator for 1, 2, or 3 dimensions --------------
-   If opts.spread_direction=1, evaluate, in the 1D case,
-
-                         N1-1
-   data_nonuniform[j] =  SUM phi(kx[j] - n) data_uniform[n],   for j=0...M-1
-                         n=0
-
-   If opts.spread_direction=2, evaluate its transpose, in the 1D case,
-
-                      M-1
-   data_uniform[n] =  SUM phi(kx[j] - n) data_nonuniform[j],   for n=0...N1-1
-                      j=0
-
-   In each case phi is the spreading kernel, which has support
-   [-opts.nspread/2,opts.nspread/2]. In 2D or 3D, the generalization with
-   product of 1D kernels is performed.
-   For 1D set N2=N3=1; for 2D set N3=1; for 3D set N1,N2,N3>1.
-
-   Notes:
-   No particular normalization of the spreading kernel is assumed.
-   Uniform (U) points are centered at coords
-   [0,1,...,N1-1] in 1D, analogously in 2D and 3D. They are stored in x
-   fastest, y medium, z slowest ordering, up to however many
-   dimensions are relevant; note that this is Fortran-style ordering for an
-   array f(x,y,z), but C style for f[z][y][x]. This is to match the Fortran
-   interface of the original CMCL libraries.
-   Non-uniform (NU) points kx,ky,kz are real, and may lie in the central three
-   periods in each coordinate (these are folded into the central period).
-   The finufft_spread_opts struct must have been set up already by calling setup_kernel.
-   It is assumed that 2*opts.nspread < min(N1,N2,N3), so that the kernel
-   only ever wraps once when falls below 0 or off the top of a uniform grid
-   dimension.
-
-   Inputs:
-   N1,N2,N3 - grid sizes in x (fastest), y (medium), z (slowest) respectively.
-              If N2==1, 1D spreading is done. If N3==1, 2D spreading.
-          Otherwise, 3D.
-   M - number of NU pts.
-   kx, ky, kz - length-M real arrays of NU point coordinates (only kx read in
-                1D, only kx and ky read in 2D).
-
-        These should lie in the box -pi<=kx<=pi. Points outside this domain are also
-        correctly folded back into this domain.
-   opts - spread/interp options struct, documented in ../include/finufft_spread_opts.h
-
-   Inputs/Outputs:
-   data_uniform - output values on grid (dir=1) OR input grid data (dir=2)
-   data_nonuniform - input strengths of the sources (dir=1)
-                     OR output values at targets (dir=2)
-   Returned value:
-   0 indicates success; other values have meanings in ../docs/error.rst, with
-   following modifications:
-      3 : one or more non-trivial box dimensions is less than 2.nspread.
-      5 : failed allocate sort indices
-
-   Magland Dec 2016. Barnett openmp version, many speedups 1/16/17-2/16/17
-   error codes 3/13/17. pirange 3/28/17. Rewritten 6/15/17. parallel sort 2/9/18
-   No separate subprob indices in t-1 2/11/18.
-   sort_threads (since for M<<N, multithread sort slower than single) 3/27/18
-   kereval, kerpad 4/24/18
-   Melody Shih split into 3 routines: check, sort, spread. Jun 2018, making
-   this routine just a caller to them. Name change, Barnett 7/27/18
-   Tidy, Barnett 5/20/20. Tidy doc, Barnett 10/22/20.
-*/
-{
-    int ier = spreadcheck(N1, N2, N3, M, opts);
-    if (ier) return ier;
-    BIGINT *sort_indices = (BIGINT *)malloc(sizeof(BIGINT) * M);
-    if (!sort_indices) {
-        fprintf(stderr, "%s failed to allocate sort_indices!\n", __func__);
-        return SPREADKERNEL_ERR_SPREAD_ALLOC;
-    }
-    int did_sort = index_sort(sort_indices, N1, N2, N3, M, kx, ky, kz, opts);
-    spread_sorted(sort_indices, N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, opts, did_sort);
-    free(sort_indices);
-    return 0;
-}
-
 static constexpr uint8_t ndims_from_Ns(const UBIGINT N1, const UBIGINT N2, const UBIGINT N3)
 /* rule for getting number of spreading dimensions from the list of Ns per dim.
    Split out, Barnett 7/26/18
@@ -341,29 +169,8 @@ static constexpr uint8_t ndims_from_Ns(const UBIGINT N1, const UBIGINT N2, const
     return 1 + (N2 > 1) + (N3 > 1);
 }
 
-int spreadcheck(UBIGINT N1, UBIGINT N2, UBIGINT N3, const spreadkernel_opts &opts)
-/* This does just the input checking and reporting for the spreader.
-   See spreadinterp() for input arguments and meaning of returned value.
-   Split out by Melody Shih, Jun 2018. Finiteness chk Barnett 7/30/18.
-   Marco Barbone 5.8.24 removed bounds check as new foldrescale is not limited to
-   [-3pi,3pi)
-*/
-{
-    // INPUT CHECKING & REPORTING .... cuboid not too small for spreading?
-    int minN = 2 * opts.nspread;
-    if (N1 < minN || (N2 > 1 && N2 < minN) || (N3 > 1 && N3 < minN)) {
-        fprintf(stderr, "%s error: one or more non-trivial box dims is less than 2.nspread!\n", __func__);
-        return SPREADKERNEL_ERR_SPREAD_BOX_SMALL;
-    }
-    if (opts.spread_direction != 1 && opts.spread_direction != 2) {
-        fprintf(stderr, "%s error: opts.spread_direction must be 1 or 2!\n", __func__);
-        return SPREADKERNEL_ERR_SPREAD_DIR;
-    }
-    return 0;
-}
-
-int index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
-               const spreadkernel_opts &opts)
+bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
+                const spreadkernel_opts &opts)
 /* This makes a decision whether or not to sort the NU pts (influenced by
    opts.sort), and if yes, calls either single- or multi-threaded bin sort,
    writing reordered index list to sort_indices. If decided not to sort, the
@@ -396,13 +203,11 @@ int index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT
     double bin_size_x = 16, bin_size_y = 4, bin_size_z = 4;
     // put in heuristics based on cache sizes (only useful for single-thread) ?
 
-    int better_to_sort = !(ndims == 1 && (opts.spread_direction == 2 || (M > 1000 * N1))); // 1D small-N or
-                                                                                           // dir=2 case:
-                                                                                           // don't sort
+    int better_to_sort = !(ndims == 1 && (M > 1000 * N1));  // 1D small-N
 
     timer.start();                                          // if needed, sort all the NU pts...
-    int did_sort = 0;
-    auto maxnthr = MY_OMP_GET_MAX_THREADS();                // used if both below opts default
+    bool did_sort = false;
+    auto maxnthr  = MY_OMP_GET_MAX_THREADS();               // used if both below opts default
     if (opts.nthreads > 0) maxnthr = opts.nthreads;         // user nthreads overrides, without limit
     if (opts.sort_threads > 0) maxnthr = opts.sort_threads; // high-priority override, also no limit
     // At this point: maxnthr = the max threads sorting could use
@@ -424,7 +229,7 @@ int index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT
             bin_sort_multithread(sort_indices, M, kx, ky, kz, N1, N2, N3, bin_size_x, bin_size_y, bin_size_z,
                                  sort_debug, sort_nthr);
         if (opts.debug) printf("\tsorted (%d threads):\t%.3g s\n", sort_nthr, timer.elapsedsec());
-        did_sort = 1;
+        did_sort = true;
     } else {
 #pragma omp parallel for num_threads(maxnthr) schedule(static, 1000000)
         for (BIGINT i = 0; i < M; i++) // here omp helps xeon, hinders i7
@@ -438,7 +243,7 @@ int index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT
 int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                   FLT *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx,
                   FLT *SPREADKERNEL_RESTRICT ky, FLT *SPREADKERNEL_RESTRICT kz, const FLT *data_nonuniform,
-                  const spreadkernel_opts &opts, int did_sort)
+                  const spreadkernel_opts &opts, bool did_sort)
 // Spread NU pts in sorted order to a uniform grid. See spreadinterp() for doc.
 {
     CNTime timer{};
@@ -523,27 +328,23 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
                 // allocate output data for this subgrid
                 du0.resize(2 * padded_size1 * size2 * size3); // complex
                 // Spread to subgrid without need for bounds checking or wrapping
-                if (!(opts.flags & TF_OMIT_SPREADING)) {
-                    if (ndims == 1)
-                        spread_subproblem_1d(offset1, padded_size1, du0.data(), M0, kx0.data(), dd0.data(), opts);
-                    else if (ndims == 2)
-                        spread_subproblem_2d(offset1, offset2, padded_size1, size2, du0.data(), M0, kx0.data(),
-                                             ky0.data(), dd0.data(), opts);
-                    else
-                        spread_subproblem_3d(offset1, offset2, offset3, padded_size1, size2, size3, du0.data(), M0,
-                                             kx0.data(), ky0.data(), kz0.data(), dd0.data(), opts);
-                }
+                if (ndims == 1)
+                    spread_subproblem_1d(offset1, padded_size1, du0.data(), M0, kx0.data(), dd0.data(), opts);
+                else if (ndims == 2)
+                    spread_subproblem_2d(offset1, offset2, padded_size1, size2, du0.data(), M0, kx0.data(), ky0.data(),
+                                         dd0.data(), opts);
+                else
+                    spread_subproblem_3d(offset1, offset2, offset3, padded_size1, size2, size3, du0.data(), M0,
+                                         kx0.data(), ky0.data(), kz0.data(), dd0.data(), opts);
                 // do the adding of subgrid to output
-                if (!(opts.flags & TF_OMIT_WRITE_TO_GRID)) {
-                    if (nthr > opts.atomic_threshold) { // see above for debug reporting
-                        add_wrapped_subgrid<true>(offset1, offset2, offset3, padded_size1, size1, size2, size3, N1, N2,
-                                                  N3, data_uniform,
-                                                  du0.data()); // R Blackwell's atomic version
-                    } else {
+                if (nthr > opts.atomic_threshold) { // see above for debug reporting
+                    add_wrapped_subgrid<true>(offset1, offset2, offset3, padded_size1, size1, size2, size3, N1, N2, N3,
+                                              data_uniform,
+                                              du0.data()); // R Blackwell's atomic version
+                } else {
 #pragma omp critical
-                        add_wrapped_subgrid<false>(offset1, offset2, offset3, padded_size1, size1, size2, size3, N1,
-                                                   N2, N3, data_uniform, du0.data());
-                    }
+                    add_wrapped_subgrid<false>(offset1, offset2, offset3, padded_size1, size1, size2, size3, N1, N2,
+                                               N3, data_uniform, du0.data());
                 }
             } // end main loop over subprobs
         }
@@ -554,163 +355,21 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
 
 ///////////////////////////////////////////////////////////////////////////
 
-int setup_spreader(spreadkernel_opts &opts, FLT eps, double upsampfac, int kerevalmeth, int debug, int showwarn,
-                   int dim)
-/* Initializes spreader kernel parameters given desired NUFFT tolerance eps,
-   upsampling factor (=sigma in paper, or R in Dutt-Rokhlin), ker eval meth
-   (either 0:exp(sqrt()), 1: Horner ppval), and some debug-level flags.
-   Also sets all default options in finufft_spread_opts. See finufft_spread_opts.h for
-   opts. dim is spatial dimension (1,2, or 3). See finufft.cpp:finufft_plan() for where
-   upsampfac is set. Must call this before any kernel evals done, otherwise segfault
-   likely. Returns: 0  : success SPREADKERNEL_WARN_EPS_TOO_SMALL : requested eps cannot be
-   achieved, but proceed with best possible eps otherwise : failure (see codes in defs.h);
-   spreading must not proceed Barnett 2017. debug, loosened eps logic 6/14/20.
-*/
-{
-    if (upsampfac != 2.0 && upsampfac != 1.25) { // nonstandard sigma
-        if (kerevalmeth == 1) {
-            fprintf(stderr,
-                    "SPREADKERNEL setup_spreader: nonstandard upsampfac=%.3g cannot be handled by "
-                    "kerevalmeth=1\n",
-                    upsampfac);
-            return SPREADKERNEL_ERR_HORNER_WRONG_BETA;
-        }
-        if (upsampfac <= 1.0) { // no digits would result
-            fprintf(stderr, "SPREADKERNEL setup_spreader: error, upsampfac=%.3g is <=1.0\n", upsampfac);
-            return SPREADKERNEL_ERR_UPSAMPFAC_TOO_SMALL;
-        }
-        // calling routine must abort on above errors, since opts is garbage!
-        if (showwarn && upsampfac > 4.0)
-            fprintf(stderr,
-                    "SPREADKERNEL setup_spreader warning: upsampfac=%.3g way too large to be "
-                    "beneficial.\n",
-                    upsampfac);
-    }
-
-    // write out default finufft_spread_opts (some overridden in setup_spreader_for_nufft)
-    opts.spread_direction = 0; // user should always set to 1 or 2 as desired
-    opts.sort             = 2; // 2:auto-choice
-    opts.kerpad           = 0; // affects only evaluate_kernel_vector
-    opts.kerevalmeth      = kerevalmeth;
-    opts.upsampfac        = upsampfac;
-    opts.nthreads         = 0; // all avail
-    opts.sort_threads     = 0; // 0:auto-choice
-    // heuristic dir=1 chunking for nthr>>1, typical for intel i7 and skylake...
-    opts.max_subproblem_size = (dim == 1) ? 10000 : 100000;
-    opts.flags               = 0; // 0:no timing flags (>0 for experts only)
-    opts.debug               = 0; // 0:no debug output
-    // heuristic nthr above which switch OMP critical to atomic (add_wrapped...):
-    opts.atomic_threshold = 10; // R Blackwell's value
-
-    int ns, ier = 0;            // Set kernel width w (aka ns, nspread) then copy to opts...
-    if (eps < EPSILON) {        // safety; there's no hope of beating e_mach
-        if (showwarn)
-            fprintf(stderr, "%s warning: increasing tol=%.3g to eps_mach=%.3g.\n", __func__, (double)eps,
-                    (double)EPSILON);
-        eps = EPSILON; // only changes local copy (not any opts)
-        ier = SPREADKERNEL_WARN_EPS_TOO_SMALL;
-    }
-    if (upsampfac == 2.0)                                               // standard sigma (see SISC paper)
-        ns = std::ceil(-log10(eps / (FLT)10.0));                        // 1 digit per power of 10
-    else                                                                // custom sigma
-        ns = std::ceil(-log(eps) / (PI * sqrt(1.0 - 1.0 / upsampfac))); // formula, gam=1
-    ns = std::max(2, ns);                                               // (we don't have ns=1 version yet)
-    if (ns > MAX_NSPREAD) {                                             // clip to fit allocated arrays, Horner rules
-        if (showwarn)
-            fprintf(stderr,
-                    "%s warning: at upsampfac=%.3g, tol=%.3g would need kernel width ns=%d; "
-                    "clipping to max %d.\n",
-                    __func__, upsampfac, (double)eps, ns, MAX_NSPREAD);
-        ns  = MAX_NSPREAD;
-        ier = SPREADKERNEL_WARN_EPS_TOO_SMALL;
-    }
-    opts.nspread = ns;
-    // setup for reference kernel eval (via formula): select beta width param...
-    // (even when kerevalmeth=1, this ker eval needed for FTs in onedim_*_kernel)
-    opts.ES_halfwidth = (double)ns / 2; // constants to help (see below routines)
-    opts.ES_c         = 4.0 / (double)(ns * ns);
-    double betaoverns = 2.30;           // gives decent betas for default sigma=2.0
-    if (ns == 2) betaoverns = 2.20;     // some small-width tweaks...
-    if (ns == 3) betaoverns = 2.26;
-    if (ns == 4) betaoverns = 2.38;
-    if (upsampfac != 2.0) {                                      // again, override beta for custom sigma
-        FLT gamma  = 0.97;                                       // must match devel/gen_all_horner_C_code.m !
-        betaoverns = gamma * PI * (1.0 - 1.0 / (2 * upsampfac)); // formula based on cutoff
-    }
-    opts.ES_beta = betaoverns * ns;                              // set the kernel beta parameter
-    if (debug)
-        printf("%s (kerevalmeth=%d) eps=%.3g sigma=%.3g: chose ns=%d beta=%.3g\n", __func__, kerevalmeth, (double)eps,
-               upsampfac, ns, opts.ES_beta);
-
-    return ier;
+void setup_spreader(spreadkernel_opts &opts, int dim) {
+    if (opts.max_subproblem_size == 0) opts.max_subproblem_size = (dim == 1) ? 10000 : 100000;
 }
 
-FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts)
-/* ES ("exp sqrt") kernel evaluation at single real argument:
-      phi(x) = exp(beta.(sqrt(1 - (2x/n_s)^2) - 1)),    for |x| < nspread/2
-   related to an asymptotic approximation to the Kaiser--Bessel, itself an
-   approximation to prolate spheroidal wavefunction (PSWF) of order 0.
-   This is the "reference implementation", used by eg finufft/onedim_* 2/17/17.
-   Rescaled so max is 1, Barnett 7/21/24
-*/
-{
-    if (abs(x) >= (FLT)opts.ES_halfwidth)
-        // if spreading/FT careful, shouldn't need this if, but causes no speed hit
+SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts) {
+    if (abs(x) >= opts.ker_half_width)
         return 0.0;
     else
-        return exp((FLT)opts.ES_beta * (sqrt((FLT)1.0 - (FLT)opts.ES_c * x * x) - (FLT)1.0));
+        return opts.ker(&x, opts.ker_data);
 }
 
-template<uint8_t ns>
-void set_kernel_args(FLT *args, FLT x) noexcept
-// Fills vector args[] with kernel arguments x, x+1, ..., x+ns-1.
-// needed for the vectorized kernel eval of Ludvig af K.
-{
+template<uint8_t ns> SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
+    // Fills vector args[] with kernel arguments x, x+1, ..., x+ns-1.
+    // needed for the vectorized kernel eval of Ludvig af K.
     for (int i = 0; i < ns; i++) args[i] = x + (FLT)i;
-}
-template<uint8_t N>
-void evaluate_kernel_vector(FLT *ker, FLT *args, const spreadkernel_opts &opts) noexcept
-/* Evaluate ES kernel for a vector of N arguments; by Ludvig af K.
-   If opts.kerpad true, args and ker must be allocated for Npad, and args is
-   written to (to pad to length Npad), only first N outputs are correct.
-   Barnett 4/24/18 option to pad to mult of 4 for better SIMD vectorization.
-   Rescaled so max is 1, Barnett 7/21/24
-
-   Obsolete (replaced by Horner), but keep around for experimentation since
-   works for arbitrary beta. Formula must match reference implementation.
-*/
-{
-    FLT b = (FLT)opts.ES_beta;
-    FLT c = (FLT)opts.ES_c;
-    if (!(opts.flags & TF_OMIT_EVALUATE_KERNEL)) {
-        // Note (by Ludvig af K): Splitting kernel evaluation into two loops
-        // seems to benefit auto-vectorization.
-        // gcc 5.4 vectorizes first loop; gcc 7.2 vectorizes both loops
-        int Npad = N;
-        if (opts.kerpad) {                 // since always same branch, no speed hit
-            Npad = 4 * (1 + (N - 1) / 4);  // pad N to mult of 4; help i7 GCC, not xeon
-            for (int i = N; i < Npad; ++i) // pad with 1-3 zeros for safe eval
-                args[i] = 0.0;
-        }
-        for (int i = 0; i < Npad; i++) { // Loop 1: Compute exponential arguments
-            // care! 1.0 is double...
-            ker[i] = b * (sqrt((FLT)1.0 - c * args[i] * args[i]) - (FLT)1.0);
-        }
-        if (!(opts.flags & TF_OMIT_EVALUATE_EXPONENTIAL))
-            for (int i = 0; i < Npad; i++) // Loop 2: Compute exponentials
-                ker[i] = exp(ker[i]);
-        if (opts.kerpad) {
-            // padded part should be zero, in spread_subproblem_nd_kernels, there are
-            // out of bound writes to trg arrays
-            for (int i = N; i < Npad; ++i) ker[i] = 0.0;
-        }
-    } else {
-        for (int i = 0; i < N; i++) // dummy for timing only
-            ker[i] = 1.0;
-    }
-    // Separate check from arithmetic (Is this really needed? doesn't slow down)
-    for (int i = 0; i < N; i++)
-        if (abs(args[i]) >= (FLT)opts.ES_halfwidth) ker[i] = 0.0;
 }
 
 template<uint8_t w, uint8_t upsampfact, class simd_type> // aka ns
@@ -1562,18 +1221,13 @@ auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, con
     // compile time loop, no performance overhead
     for (auto i = 0; i < sizeof...(elems); ++i) {
         // compile time branch no performance overhead
-        if constexpr (kerevalmeth == 1) {
-            if (opts.upsampfac == 2.0) {
-                eval_kernel_vec_Horner<ns, 200, simd_type>(ker + (i * MAX_NSPREAD), inputs[i], opts);
-            }
-            if (opts.upsampfac == 1.25) {
-                eval_kernel_vec_Horner<ns, 125, simd_type>(ker + (i * MAX_NSPREAD), inputs[i], opts);
-            }
-        }
         if constexpr (kerevalmeth == 0) {
             alignas(simd_type::arch_type::alignment()) std::array<T, MAX_NSPREAD> kernel_args{};
             set_kernel_args<ns>(kernel_args.data(), inputs[i]);
-            evaluate_kernel_vector<ns>(ker + (i * MAX_NSPREAD), kernel_args.data(), opts);
+            for (auto j = 0; j < ns; ++j) evaluate_kernel(kernel_args[j], opts);
+        }
+        if constexpr (kerevalmeth == 1) {
+            // FIXME: fill in horner eval here
         }
     }
     return ker;
@@ -1737,4 +1391,19 @@ void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset
 } // namespace
 } // namespace spreadkernel
 
-extern "C" {}
+extern "C" {
+int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, FLT *data_uniform, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
+                  FLT *data_nonuniform, spreadkernel_opts *opts) {
+    spreadkernel::setup_spreader(*opts, spreadkernel::ndims_from_Ns(N1, N2, N3));
+    std::unique_ptr<BIGINT[]> sort_indices(new BIGINT[M]);
+    if (!sort_indices) {
+        fprintf(stderr, "%s failed to allocate sort_indices!\n", __func__);
+        return SPREADKERNEL_ERR_SPREAD_ALLOC;
+    }
+    auto did_sort = spreadkernel::index_sort(sort_indices.get(), N1, N2, N3, M, kx, ky, kz, *opts);
+    spreadkernel::spread_sorted(sort_indices.get(), N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, *opts,
+                                did_sort);
+
+    return SPREADKERNEL_SUCCESS;
+}
+}

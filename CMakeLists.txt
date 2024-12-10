@@ -4,7 +4,8 @@ project(
   LANGUAGES CXX
   )
 
-set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -23,6 +24,10 @@ FetchContent_MakeAvailable(xsimd)
 
 
 add_library(spreadkernel src/spreadkernel.cpp)
-target_include_directories(spreadkernel PRIVATE include)
+target_include_directories(spreadkernel PUBLIC include)
 target_link_libraries(spreadkernel PRIVATE xsimd)
-target_compile_options(spreadkernel PRIVATE)
+target_compile_options(spreadkernel PRIVATE -march=native)
+
+add_executable(benchmark src/benchmark.cpp)
+target_link_libraries(benchmark PRIVATE spreadkernel nanobench)
+target_compile_options(benchmark PRIVATE -march=native)
