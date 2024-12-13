@@ -10,7 +10,7 @@ AlignTrailingComments:
   OverEmptyLines: 1
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLambdasOnASingleLine: Inline
-AllowShortLoopsOnASingleLine: true
+AllowShortLoopsOnASingleLine: false
 BreakBeforeBraces: Attach
 BreakBeforeBinaryOperators: None
 ColumnLimit: 119

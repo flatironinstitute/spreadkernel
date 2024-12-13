@@ -3,6 +3,7 @@
 // Authors: Alex Barnett, Ludvig af Klinteberg, Marco Barbone & Libin Lu.
 // (C) 2018--2024 The Simons Foundation, Inc.
 #include <array>
+#include <cstdint>
 
 template<class T, uint8_t w> constexpr auto get_horner_coeffs_200() noexcept {
   if constexpr (w == 2) {

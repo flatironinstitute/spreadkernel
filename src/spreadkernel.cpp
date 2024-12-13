@@ -294,7 +294,8 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
             printf("\tnthr big: switching add_wrapped OMP from critical to atomic (!)\n");
 
         std::vector<UBIGINT> brk(nb + 1); // NU index breakpoints defining nb subproblems
-        for (int p = 0; p <= nb; ++p) brk[p] = (M * p + nb - 1) / nb;
+        for (int p = 0; p <= nb; ++p)
+            brk[p] = (M * p + nb - 1) / nb;
 
 #pragma omp parallel num_threads(nthr)
         {
@@ -369,7 +370,8 @@ SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &o
 template<uint8_t ns> SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
     // Fills vector args[] with kernel arguments x, x+1, ..., x+ns-1.
     // needed for the vectorized kernel eval of Ludvig af K.
-    for (int i = 0; i < ns; i++) args[i] = x + (FLT)i;
+    for (int i = 0; i < ns; i++)
+        args[i] = x + (FLT)i;
 }
 
 template<uint8_t w, uint8_t upsampfact, class simd_type> // aka ns
@@ -1030,7 +1032,7 @@ void bin_sort_singlethread(BIGINT *ret, const UBIGINT M, const FLT *kx, const FL
         BIGINT tmp = counts[i];
         counts[i]  = current_offset; // Reinecke's cute replacement of counts[i]
         current_offset += tmp;
-    }                                // (counts now contains the index offsets for each bin)
+    } // (counts now contains the index offsets for each bin)
 
     for (auto i = 0; i < M; i++) {
         // find the bin index (again! but better than using RAM)
@@ -1065,7 +1067,8 @@ void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBI
     std::vector<UBIGINT> brk(nt + 1);    // list of start NU pt indices per thread
 
     // distribute the NU pts to threads once & for all...
-    for (int t = 0; t <= nt; ++t) brk[t] = (UBIGINT)(0.5 + M * t / (double)nt); // start index for t'th chunk
+    for (int t = 0; t <= nt; ++t)
+        brk[t] = (UBIGINT)(0.5 + M * t / (double)nt); // start index for t'th chunk
 
     // set up 2d array (nthreads * nbins), just its pointers for now
     // (sub-vectors will be initialized later)
@@ -1224,7 +1227,8 @@ auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, con
         if constexpr (kerevalmeth == 0) {
             alignas(simd_type::arch_type::alignment()) std::array<T, MAX_NSPREAD> kernel_args{};
             set_kernel_args<ns>(kernel_args.data(), inputs[i]);
-            for (auto j = 0; j < ns; ++j) evaluate_kernel(kernel_args[j], opts);
+            for (auto j = 0; j < ns; ++j)
+                evaluate_kernel(kernel_args[j], opts);
         }
         if constexpr (kerevalmeth == 1) {
             // FIXME: fill in horner eval here
