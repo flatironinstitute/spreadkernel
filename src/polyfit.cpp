@@ -49,6 +49,15 @@ void fit_multi(kernel_func f, double lb, double ub, int order, const void *data,
     }
 }
 
+void eval_grid(const Eigen::VectorXd &coeffs, double x, double lb, double ub, int order, int n, double *output) {
+    const double h      = (ub - lb) / n;
+    const double half_h = 0.5 * h;
+    const int i         = (x - lb) / h;
+    const double dx     = x - (lb + half_h * (2 * i + 1));
+    for (int j = 0; j < n; j++)
+        output[j] = eval(coeffs.segment(j * order, order), dx);
+}
+
 void testfit() {
     const double lb = -0.7;
     const double ub = 0.8;
@@ -82,4 +91,14 @@ void testfit() {
         y_multi(i) = eval_multi(coeffs_multi, x(i), lb, ub, multi_order, h);
     auto stderr_multi = (y_multi - yraw).array().abs().sum() / 100;
     std::cout << stderr_multi << std::endl;
+
+    Eigen::VectorXd y_grid       = Eigen::VectorXd::Zero(n_poly);
+    Eigen::VectorXd x_grid_multi = Eigen::VectorXd::LinSpaced(n_poly, lb + 0.75 * h, ub - 0.25 * h);
+    Eigen::VectorXd y_grid_multi = Eigen::VectorXd::Zero(n_poly);
+    eval_grid(coeffs_multi, lb + 1.75 * h, lb, ub, multi_order, n_poly, y_grid.data());
+    for (int i = 0; i < n_poly; i++)
+        y_grid_multi(i) = f(x_grid_multi(i), data);
+
+    auto stderr_grid = (y_grid - y_grid_multi).array().abs().sum() / n_poly;
+    std::cout << stderr_grid << std::endl;
 }
