@@ -22,26 +22,15 @@ FetchContent_Declare(
   GIT_TAG 13.0.0
   GIT_SHALLOW TRUE)
 
-set(BUILD_TESTING_OFF)
-set(EIGEN_BUILD_TESTING OFF)
-set(EIGEN_MPL2_ONLY ON)
-set(EIGEN_BUILD_PKGCONFIG OFF)
-set(EIGEN_BUILD_DOC OFF)
-FetchContent_Declare(
-  Eigen
-  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-  GIT_TAG 3.4.0
-  GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(xsimd Eigen nanobench)
-
+FetchContent_MakeAvailable(xsimd nanobench)
 
 add_library(spreadkernel src/spreadkernel.cpp src/polyfit.cpp)
 target_include_directories(spreadkernel PUBLIC include)
-target_link_libraries(spreadkernel PRIVATE xsimd Eigen3::Eigen OpenMP::OpenMP_CXX)
+target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX)
 target_compile_options(spreadkernel PRIVATE -march=native)
 
 add_executable(benchmark src/benchmark.cpp)
-target_link_libraries(benchmark PRIVATE spreadkernel nanobench Eigen3::Eigen)
+target_link_libraries(benchmark PRIVATE spreadkernel nanobench)
 target_compile_options(benchmark PRIVATE -march=native)
 
 add_executable(test src/test.cpp)
