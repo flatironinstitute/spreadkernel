@@ -22,16 +22,22 @@ FetchContent_Declare(
   GIT_TAG 13.0.0
   GIT_SHALLOW TRUE)
 
-FetchContent_MakeAvailable(xsimd nanobench)
+FetchContent_Declare(
+  doctest
+  GIT_REPOSITORY https://github.com/doctest/doctest.git
+  GIT_TAG v2.4.11
+  GIT_SHALLOW TRUE)
 
-add_library(spreadkernel src/spreadkernel.cpp src/polyfit.cpp)
+FetchContent_MakeAvailable(xsimd nanobench doctest)
+
+add_library(spreadkernel SHARED src/spreadkernel.cpp src/polyfit.cpp src/doctest.cpp)
 target_include_directories(spreadkernel PUBLIC include)
-target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX)
+target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX doctest)
 target_compile_options(spreadkernel PRIVATE -march=native)
 
 add_executable(benchmark src/benchmark.cpp)
 target_link_libraries(benchmark PRIVATE spreadkernel nanobench)
 target_compile_options(benchmark PRIVATE -march=native)
 
-add_executable(test src/test.cpp)
-target_link_libraries(test PRIVATE spreadkernel)
+add_executable(run_tests test/run_tests.cpp)
+target_link_libraries(run_tests PRIVATE spreadkernel doctest)

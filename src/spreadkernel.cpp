@@ -2,8 +2,8 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
-#include <spreadkernel.h>
 #include <polyfit.h>
+#include <spreadkernel.h>
 
 #include <xsimd/xsimd.hpp>
 
@@ -127,9 +127,9 @@ static void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGIN
                         BIGINT &size2, BIGINT &size3, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, int ns, int ndims);
 bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
                 const spreadkernel_opts &opts);
-int spread_sorted(const BIGINT *sort_indices, const UBIGINT N1, const UBIGINT N2, const UBIGINT N3, FLT *data_uniform,
-                  const UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx, FLT *SPREADKERNEL_RESTRICT ky,
-                  FLT *SPREADKERNEL_RESTRICT kz, FLT *SPREADKERNEL_RESTRICT data_nonuniform,
+int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3,
+                  FLT *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx,
+                  FLT *SPREADKERNEL_RESTRICT ky, FLT *SPREADKERNEL_RESTRICT kz, const FLT *data_nonuniform,
                   const spreadkernel_opts &opts, bool did_sort);
 
 template<typename T, std::size_t N, std::size_t M, std::size_t PaddedM>

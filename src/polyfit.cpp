@@ -1,3 +1,4 @@
+#include <doctest/doctest.h>
 #include <polyfit.h>
 
 #include <algorithm>
@@ -164,9 +165,9 @@ double abs_error(const std::vector<double> &y1, const std::vector<double> &y2) {
 
     return error / y1.size();
 }
-} // namespace spreadkernel
+} // namespace spreadkernel::polyfit
 
-void testfit() {
+TEST_CASE("SPREADKERNEL fits/evals") {
     using namespace spreadkernel::polyfit;
     const double lb       = -0.7;
     const double ub       = 0.8;
@@ -177,6 +178,7 @@ void testfit() {
     const int n_poly      = 7;
     const double h        = (ub - lb) / n_poly;
     const int multi_order = 8;
+    const double tol      = 1E-8;
 
     void *data    = NULL;
     kernel_func f = [](double x, const void *data) {
@@ -195,7 +197,7 @@ void testfit() {
     for (int i = 0; i < n_samples; i++)
         yraw[i] = f(x[i], data);
 
-    std::cout << abs_error(y, yraw) << std::endl;
+    CHECK(abs_error(y, yraw) < tol);
 
     std::vector<double> coeffs_multi(multi_order * n_poly);
     fit_multi(f, lb, ub, multi_order, data, coeffs_multi.data(), n_poly);
@@ -204,7 +206,7 @@ void testfit() {
         std::vector<double> y_multi(n_samples);
         for (int i = 0; i < n_samples; i++)
             y_multi[i] = eval_multi(coeffs_multi, x[i], lb, ub, multi_order, h);
-        std::cout << abs_error(y_multi, yraw) << std::endl;
+        CHECK(abs_error(y_multi, yraw) < tol);
     }
 
     std::vector<double> y_grid(n_poly);
@@ -213,14 +215,13 @@ void testfit() {
     eval_grid(coeffs_multi, lb + 1.75 * h, lb, ub, multi_order, n_poly, y_grid.data());
     for (int i = 0; i < n_poly; i++)
         y_grid_multi[i] = f(x_grid_multi[i], data);
+    CHECK(abs_error(y_grid, y_grid_multi) < tol);
 
-    std::cout << abs_error(y_grid, y_grid_multi) << std::endl;
-
-    auto coeffs_auto = fit_multi_auto(f, lb, ub, data, n_poly, 1E-8, min_order, max_order, n_samples);
+    auto coeffs_auto = fit_multi_auto(f, lb, ub, data, n_poly, tol, min_order, max_order, n_samples);
     auto auto_order  = coeffs_auto.size() / n_poly;
 
     std::vector<double> y_auto(n_samples);
     for (int i = 0; i < n_samples; i++)
         y_auto[i] = eval_multi(coeffs_auto, x[i], lb, ub, auto_order, h);
-    std::cout << abs_error(y_auto, yraw) << std::endl;
+    CHECK(abs_error(y_auto, yraw) < tol);
 }
