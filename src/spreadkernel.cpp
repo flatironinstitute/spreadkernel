@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include <spreadkernel.h>
+#include <polyfit.h>
 
 #include <xsimd/xsimd.hpp>
 
@@ -358,13 +359,25 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
 
 void setup_spreader(spreadkernel_opts &opts, int dim) {
     if (opts.max_subproblem_size == 0) opts.max_subproblem_size = (dim == 1) ? 10000 : 100000;
+    opts.nspread = 2 * opts.ker_half_width / opts.grid_delta[0];
+    assert(opts.ker);
+    assert(opts.ker_half_width > 0);
+    assert(opts.grid_delta[0] > 0);
+    assert(opts.nspread >= MIN_NSPREAD);
+    assert(opts.nspread <= MAX_NSPREAD);
+    assert(std::abs(opts.nspread - 2 * opts.ker_half_width / opts.grid_delta[0]) <
+           10 * std::numeric_limits<double>::epsilon());
+
+    if (opts.kerevalmeth)
+        opts.coeffs = polyfit::fit_multi_auto(opts.ker, -opts.ker_half_width, opts.ker_half_width, opts.ker_data,
+                                              opts.nspread, opts.eps, MIN_NSPREAD, MAX_NSPREAD, 100);
 }
 
 SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts) {
     if (abs(x) >= opts.ker_half_width)
         return 0.0;
     else
-        return opts.ker(&x, opts.ker_data);
+        return opts.ker(x, opts.ker_data);
 }
 
 template<uint8_t ns> SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
@@ -1396,9 +1409,13 @@ void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset
 } // namespace spreadkernel
 
 extern "C" {
+int spread_kernel_init(UBIGINT N1, UBIGINT N2, UBIGINT N3, spreadkernel_opts *opts) {
+    spreadkernel::setup_spreader(*opts, spreadkernel::ndims_from_Ns(N1, N2, N3));
+    return SPREADKERNEL_SUCCESS;
+}
+
 int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, FLT *data_uniform, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
                   FLT *data_nonuniform, spreadkernel_opts *opts) {
-    spreadkernel::setup_spreader(*opts, spreadkernel::ndims_from_Ns(N1, N2, N3));
     std::unique_ptr<BIGINT[]> sort_indices(new BIGINT[M]);
     if (!sort_indices) {
         fprintf(stderr, "%s failed to allocate sort_indices!\n", __func__);

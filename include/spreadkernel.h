@@ -1,6 +1,8 @@
 #ifndef SPREADKERNEL_H
 #define SPREADKERNEL_H
 
+#include <vector>
+
 #ifdef _OPENMP
 #include <omp.h>
 // point to actual omp utils
@@ -65,21 +67,37 @@ enum {
     SPREADKERNEL_ERR_LOCK_FUNS_INVALID      = 22
 };
 
+typedef double (*spreadkernel_kernel_func)(double, const void *);
+
+enum spreadkernel_eval_method : int {
+    SPREADKERNEL_EVAL_DIRECT     = 0, // direct, for debugging
+    SPREADKERNEL_EVAL_HORNER_VEC = 1, // Horner polynomial evaluation, vectorized over grid points. Fastest. Default.
+    SPREADKERNEL_EVAL_HORNER_DIRECT = 2, // Horner polynomial evaluation, one evaluation per grid point, for debugging
+};
+
+enum spreadkernel_sort_strategy : int {
+    SPREADKERNEL_SORT_NONE   = 0, // no sorting
+    SPREADKERNEL_SORT_SORTED = 1, // sorted non-uniform pts
+    SPREADKERNEL_SORT_AUTO   = 2, // heuristic choice
+};
+
 typedef struct spreadkernel_opts {
-    int nspread                     = 0;       // w, the kernel width in grid pts
-    int sort                        = 2;       // 0: don't sort NU pts, 1: do, 2: heuristic choice
-    int kerevalmeth                 = 0;       // 0: direct , or 1: Horner ppval, fastest
-    int nthreads                    = 0;       // # threads for spreadinterp (0: use max avail)
-    int sort_threads                = 0;       // # threads for sort (0: auto-choice up to nthreads)
-    int max_subproblem_size         = 0;       // # pts per t1 subprob; sets extra RAM per thread. 0: auto
-    int debug                       = 0;       // 0: silent, 1: small text output, 2: verbose
-    int atomic_threshold            = 10;      // num threads before switching spread_sorted to using atomic ops
-    double lower_bounds[3]          = {0.0};   // lower bounds of the uniform grid
-    double grid_delta[3]            = {0.0};   // grid spacing
-    int periodicity[3]              = {0};     // 0: no, 1: yes
-    double ker_half_width           = 0.0;     // half the kernel width in real units
-    double (*ker)(double *, void *) = nullptr; // ptr to the kernel function
-    void *ker_data                  = nullptr; // ptr to the kernel data
+    int nspread             = 0;                            // w, the kernel width in grid pts
+    int sort                = SPREADKERNEL_SORT_AUTO;       // 0: don't sort NU pts, 1: do, 2: heuristic choice
+    int kerevalmeth         = SPREADKERNEL_EVAL_HORNER_VEC; // kernel evaluation method (see spreadkernel_eval_method)
+    int nthreads            = 0;                            // # threads for spreading (0: use max avail)
+    int sort_threads        = 0;                            // # threads for sort (0: auto-choice up to nthreads)
+    int max_subproblem_size = 0;                            // # pts per t1 subprob; sets extra RAM per thread. 0: auto
+    int debug               = 0;                            // 0: silent, 1: small text output, 2: verbose
+    int atomic_threshold    = 10;           // num threads before switching spread_sorted to using atomic ops
+    double lower_bounds[3]  = {0.0};        // lower bounds of the uniform grid
+    double grid_delta[3]    = {0.0};        // grid spacing
+    int periodicity[3]      = {0};          // 0: no, 1: yes
+    double ker_half_width   = 0.0;          // half the kernel width in real units
+    spreadkernel_kernel_func ker = nullptr; // ptr to the kernel function
+    void *ker_data               = nullptr; // ptr to the kernel data (e.g. constants to modify your kernel func)
+    double eps                   = 1e-7;    // error tolerance for kernel approximation
+    std::vector<double> coeffs;             // coefficients for Horner polynomial
 } spreadkernel_opts;
 
 #ifdef __cplusplus

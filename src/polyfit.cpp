@@ -1,3 +1,5 @@
+#include <polyfit.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -6,7 +8,7 @@
 #include <tuple>
 #include <vector>
 
-typedef double (*kernel_func)(double, const void *);
+namespace spreadkernel::polyfit {
 
 std::vector<double> vandermonde_inverse(int order, double *x) {
     // https://github.com/yveschris/possibly-the-fastest-analytical-inverse-of-vandermonde-matrices
@@ -52,7 +54,7 @@ std::vector<double> linspaced(int n, double lb, double ub) {
     return x;
 }
 
-void fit(kernel_func f, double lb, double ub, int order, const void *data, double *coeffs, double offset = 0.0) {
+void fit(kernel_func f, double lb, double ub, int order, const void *data, double *coeffs, double offset) {
     std::vector<double> x = linspaced(order, lb, ub);
 
     std::vector<double> y(order);
@@ -77,7 +79,7 @@ double eval(const double *coeffs, int order, double x) {
 
 std::vector<double> fit(kernel_func f, double lb, double ub, int order, const void *data) {
     std::vector<double> coeffs(order);
-    fit(f, lb, ub, order, data, coeffs.data());
+    fit(f, lb, ub, order, data, coeffs.data(), 0.0);
     return coeffs;
 }
 
@@ -162,8 +164,10 @@ double abs_error(const std::vector<double> &y1, const std::vector<double> &y2) {
 
     return error / y1.size();
 }
+} // namespace spreadkernel
 
 void testfit() {
+    using namespace spreadkernel::polyfit;
     const double lb       = -0.7;
     const double ub       = 0.8;
     const int order       = 16;
