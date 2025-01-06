@@ -28,11 +28,27 @@ FetchContent_Declare(
   GIT_TAG v2.4.11
   GIT_SHALLOW TRUE)
 
-FetchContent_MakeAvailable(xsimd nanobench doctest)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.15.0
+  GIT_SHALLOW TRUE)
+
+FetchContent_GetProperties(spdlog)
+if(NOT spdlog_POPULATED)
+  FetchContent_Populate(spdlog)
+  add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})
+  set_target_properties(spdlog
+    PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+  )
+endif()
+
+FetchContent_MakeAvailable(xsimd nanobench doctest spdlog)
 
 add_library(spreadkernel SHARED src/spreadkernel.cpp src/polyfit.cpp src/doctest.cpp)
 target_include_directories(spreadkernel PUBLIC include)
-target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX doctest)
+target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX doctest spdlog::spdlog)
 target_compile_options(spreadkernel PRIVATE -march=native)
 
 add_executable(benchmark src/benchmark.cpp)

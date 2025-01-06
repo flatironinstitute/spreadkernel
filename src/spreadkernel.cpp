@@ -5,6 +5,8 @@
 #include <polyfit.h>
 #include <spreadkernel.h>
 
+#include <doctest/doctest.h>
+#include <spdlog/spdlog.h>
 #include <xsimd/xsimd.hpp>
 
 #include <cmath>
@@ -1410,6 +1412,7 @@ void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset
 
 extern "C" {
 int spread_kernel_init(UBIGINT N1, UBIGINT N2, UBIGINT N3, spreadkernel_opts *opts) {
+    spdlog::info("Initializing spread kernel with N1: {}, N2: {}, N3: {}", N1, N2, N3);
     spreadkernel::setup_spreader(*opts, spreadkernel::ndims_from_Ns(N1, N2, N3));
     return SPREADKERNEL_SUCCESS;
 }
@@ -1427,4 +1430,17 @@ int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, FLT *data_uniform, UBIGINT
 
     return SPREADKERNEL_SUCCESS;
 }
+}
+
+TEST_CASE("SPREADKERNEL setup spreader") {
+    spreadkernel_opts opts;
+    UBIGINT N1 = 100, N2 = 100, N3 = 100;
+    std::fill(opts.grid_delta, opts.grid_delta + 3, 1.0);
+    opts.ker_half_width = 4;
+    opts.eps = 1e-7;
+    opts.ker            = [](double x, const void *) {
+        return exp(-1.0 / (x * x));
+    };
+
+    spread_kernel_init(N1, N2, N3, &opts);
 }

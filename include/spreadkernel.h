@@ -89,15 +89,15 @@ typedef struct spreadkernel_opts {
     int sort_threads        = 0;                            // # threads for sort (0: auto-choice up to nthreads)
     int max_subproblem_size = 0;                            // # pts per t1 subprob; sets extra RAM per thread. 0: auto
     int debug               = 0;                            // 0: silent, 1: small text output, 2: verbose
-    int atomic_threshold    = 10;           // num threads before switching spread_sorted to using atomic ops
-    double lower_bounds[3]  = {0.0};        // lower bounds of the uniform grid
-    double grid_delta[3]    = {0.0};        // grid spacing
-    int periodicity[3]      = {0};          // 0: no, 1: yes
-    double ker_half_width   = 0.0;          // half the kernel width in real units
-    spreadkernel_kernel_func ker = nullptr; // ptr to the kernel function
-    void *ker_data               = nullptr; // ptr to the kernel data (e.g. constants to modify your kernel func)
-    double eps                   = 1e-7;    // error tolerance for kernel approximation
-    std::vector<double> coeffs;             // coefficients for Horner polynomial
+    int atomic_threshold    = 10;              // num threads before switching spread_sorted to using atomic ops
+    double lower_bounds[3]  = {0.0, 0.0, 0.0}; // lower bounds of the uniform grid
+    double grid_delta[3]    = {0.0, 0.0, 0.0}; // grid spacing
+    int periodicity[3]      = {0, 0, 0};       // 0: no, 1: yes
+    double ker_half_width   = 0.0;             // half the kernel width in real units
+    spreadkernel_kernel_func ker = nullptr;    // ptr to the kernel function
+    void *ker_data               = nullptr;    // ptr to the kernel data (e.g. constants to modify your kernel func)
+    double eps                   = 1e-7;       // error tolerance for kernel approximation
+    std::vector<double> coeffs;                // coefficients for Horner polynomial
 } spreadkernel_opts;
 
 #ifdef __cplusplus
