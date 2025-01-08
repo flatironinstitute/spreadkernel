@@ -63,30 +63,41 @@ namespace { // anonymous namespace for internal structs equivalent to declaring 
             // static
 struct zip_low;
 struct zip_hi;
-template<unsigned cap> struct reverse_index;
-template<unsigned cap> struct shuffle_index;
+template <unsigned cap>
+struct reverse_index;
+template <unsigned cap>
+struct shuffle_index;
 struct select_even;
 struct select_odd;
 // forward declaration to clean up the code and be able to use this everywhere in the file
-template<class T, uint8_t N, uint8_t K = N> static constexpr auto BestSIMDHelper();
-template<class T, uint8_t N> constexpr auto GetPaddedSIMDWidth();
-template<class T, uint8_t N> using PaddedSIMD = typename xsimd::make_sized_batch<T, GetPaddedSIMDWidth<T, N>()>::type;
-template<class T> uint8_t get_padding(uint8_t ns);
-template<class T, uint8_t ns> constexpr auto get_padding();
-template<class T, uint8_t N> using BestSIMD = typename decltype(BestSIMDHelper<T, N, xsimd::batch<T>::size>())::type;
-template<class T, uint8_t N = 1> constexpr uint8_t min_simd_width();
-template<class T, uint8_t N> constexpr auto find_optimal_simd_width();
-template<class T, class V = typename T::value_type, std::size_t N = T::size>
+template <class T, uint8_t N, uint8_t K = N>
+static constexpr auto BestSIMDHelper();
+template <class T, uint8_t N>
+constexpr auto GetPaddedSIMDWidth();
+template <class T, uint8_t N>
+using PaddedSIMD = typename xsimd::make_sized_batch<T, GetPaddedSIMDWidth<T, N>()>::type;
+template <class T>
+uint8_t get_padding(uint8_t ns);
+template <class T, uint8_t ns>
+constexpr auto get_padding();
+template <class T, uint8_t N>
+using BestSIMD = typename decltype(BestSIMDHelper<T, N, xsimd::batch<T>::size>())::type;
+template <class T, uint8_t N = 1>
+constexpr uint8_t min_simd_width();
+template <class T, uint8_t N>
+constexpr auto find_optimal_simd_width();
+template <class T, class V = typename T::value_type, std::size_t N = T::size>
 constexpr auto initialize_complex_register(V a, V b) noexcept;
-template<class arch_t>
+template <class arch_t>
 constexpr auto zip_low_index = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, zip_low>();
-template<class arch_t>
+template <class arch_t>
 constexpr auto zip_hi_index = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, zip_hi>();
-template<class arch_t>
+template <class arch_t>
 constexpr auto select_even_mask = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, select_even>();
-template<class arch_t>
+template <class arch_t>
 constexpr auto select_odd_mask = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, select_odd>();
-template<typename T> SPREADKERNEL_ALWAYS_INLINE auto xsimd_to_array(const T &vec) noexcept;
+template <typename T>
+SPREADKERNEL_ALWAYS_INLINE auto xsimd_to_array(const T &vec) noexcept;
 
 SPREADKERNEL_NEVER_INLINE
 void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
@@ -94,18 +105,18 @@ void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset
 } // namespace
 
 // declarations of purely internal functions... (thus need not be in .h)
-template<uint8_t ns, uint8_t kerevalmeth, class T,
-         class simd_type = xsimd::make_sized_batch_t<T, find_optimal_simd_width<T, ns>()>, typename... V>
+template <uint8_t ns, uint8_t kerevalmeth, class T,
+          class simd_type = xsimd::make_sized_batch_t<T, find_optimal_simd_width<T, ns>()>, typename... V>
 static SPREADKERNEL_ALWAYS_INLINE auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts,
                                                 const V... elems) noexcept;
 static SPREADKERNEL_ALWAYS_INLINE FLT fold_rescale(FLT x, UBIGINT N) noexcept;
-template<class simd_type>
+template <class simd_type>
 SPREADKERNEL_ALWAYS_INLINE static simd_type fold_rescale(const simd_type &x, UBIGINT N) noexcept;
 static SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x, const spreadkernel_opts &opts) noexcept;
 static SPREADKERNEL_ALWAYS_INLINE void evaluate_kernel_vector(FLT *ker, FLT *args,
                                                               const spreadkernel_opts &opts) noexcept;
-template<uint8_t w, uint8_t upsampfact,
-         class simd_type = xsimd::make_sized_batch_t<FLT, find_optimal_simd_width<FLT, w>()>> // aka ns
+template <uint8_t w, uint8_t upsampfact,
+          class simd_type = xsimd::make_sized_batch_t<FLT, find_optimal_simd_width<FLT, w>()>> // aka ns
 static SPREADKERNEL_ALWAYS_INLINE void eval_kernel_vec_Horner(FLT *SPREADKERNEL_RESTRICT ker, FLT x,
                                                               const spreadkernel_opts &opts) noexcept;
 static void spread_subproblem_1d(BIGINT off1, UBIGINT size1, FLT *du0, UBIGINT M0, FLT *kx0, FLT *dd0,
@@ -116,7 +127,7 @@ static void spread_subproblem_2d(BIGINT off1, BIGINT off2, UBIGINT size1, UBIGIN
 static void spread_subproblem_3d(BIGINT off1, BIGINT off2, BIGINT off3, UBIGINT size1, UBIGINT size2, UBIGINT size3,
                                  FLT *du0, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, FLT *dd0,
                                  const spreadkernel_opts &opts) noexcept;
-template<bool thread_safe>
+template <bool thread_safe>
 static void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
                                 UBIGINT size2, UBIGINT size3, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                                 FLT *SPREADKERNEL_RESTRICT data_uniform, const FLT *du0);
@@ -134,7 +145,7 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
                   FLT *SPREADKERNEL_RESTRICT ky, FLT *SPREADKERNEL_RESTRICT kz, const FLT *data_nonuniform,
                   const spreadkernel_opts &opts, bool did_sort);
 
-template<typename T, std::size_t N, std::size_t M, std::size_t PaddedM>
+template <typename T, std::size_t N, std::size_t M, std::size_t PaddedM>
 constexpr std::array<std::array<T, PaddedM>, N> pad_2D_array_with_zeros(
     const std::array<std::array<T, M>, N> &input) noexcept {
     constexpr auto pad_with_zeros = [](const auto &input) constexpr noexcept {
@@ -371,8 +382,8 @@ void setup_spreader(spreadkernel_opts &opts, int dim) {
            10 * std::numeric_limits<double>::epsilon());
 
     if (opts.kerevalmeth)
-        opts.coeffs = polyfit::fit_multi_auto(opts.ker, -opts.ker_half_width, opts.ker_half_width, opts.ker_data,
-                                              opts.nspread, opts.eps, MIN_NSPREAD, MAX_NSPREAD, 100);
+        opts.kerpoly = polyfit::Polyfit(opts.ker, opts.ker_data, -opts.ker_half_width, opts.ker_half_width,
+                                        opts.nspread, opts.eps, MIN_NSPREAD, MAX_NSPREAD, 100);
 }
 
 SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts) {
@@ -382,14 +393,15 @@ SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &o
         return opts.ker(x, opts.ker_data);
 }
 
-template<uint8_t ns> SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
+template <uint8_t ns>
+SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
     // Fills vector args[] with kernel arguments x, x+1, ..., x+ns-1.
     // needed for the vectorized kernel eval of Ludvig af K.
     for (int i = 0; i < ns; i++)
         args[i] = x + (FLT)i;
 }
 
-template<uint8_t w, uint8_t upsampfact, class simd_type> // aka ns
+template <uint8_t w, uint8_t upsampfact, class simd_type> // aka ns
 void eval_kernel_vec_Horner(FLT *SPREADKERNEL_RESTRICT ker, const FLT x, const spreadkernel_opts &opts) noexcept
 /* Fill ker[] with Horner piecewise poly approx to [-w/2,w/2] ES kernel eval at
 x_j = x + j,  for j=0,..,w-1.  Thus x in [-w/2,-w/2+1].   w is aka ns.
@@ -478,7 +490,7 @@ Two upsampfacs implemented. Params must match ref formula. Barnett 4/24/18 */
     }
 }
 
-template<uint8_t ns, bool kerevalmeth>
+template <uint8_t ns, bool kerevalmeth>
 SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     const BIGINT off1, const UBIGINT size1, FLT *SPREADKERNEL_RESTRICT du, const UBIGINT M, const FLT *const kx,
     const FLT *const dd, const spreadkernel_opts &opts) noexcept {
@@ -618,7 +630,7 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     }
 }
 
-template<uint8_t NS>
+template <uint8_t NS>
 static void spread_subproblem_1d_dispatch(const BIGINT off1, const UBIGINT size1, FLT *SPREADKERNEL_RESTRICT du,
                                           const UBIGINT M, const FLT *kx, const FLT *dd,
                                           const spreadkernel_opts &opts) noexcept {
@@ -683,7 +695,7 @@ void spread_subproblem_1d(BIGINT off1, UBIGINT size1, FLT *du, UBIGINT M, FLT *k
     spread_subproblem_1d_dispatch<MAX_NSPREAD>(off1, size1, du, M, kx, dd, opts);
 }
 
-template<uint8_t ns, bool kerevalmeth>
+template <uint8_t ns, bool kerevalmeth>
 SPREADKERNEL_NEVER_INLINE static void spread_subproblem_2d_kernel(
     const BIGINT off1, const BIGINT off2, const UBIGINT size1, const UBIGINT size2, FLT *SPREADKERNEL_RESTRICT du,
     const UBIGINT M, const FLT *kx, const FLT *ky, const FLT *dd, const spreadkernel_opts &opts) noexcept
@@ -774,7 +786,7 @@ SPREADKERNEL_NEVER_INLINE static void spread_subproblem_2d_kernel(
     }
 }
 
-template<uint8_t NS>
+template <uint8_t NS>
 void spread_subproblem_2d_dispatch(const BIGINT off1, const BIGINT off2, const UBIGINT size1, const UBIGINT size2,
                                    FLT *SPREADKERNEL_RESTRICT du, const UBIGINT M, const FLT *kx, const FLT *ky,
                                    const FLT *dd, const spreadkernel_opts &opts) {
@@ -812,7 +824,7 @@ void spread_subproblem_2d(const BIGINT off1, const BIGINT off2, const UBIGINT si
     spread_subproblem_2d_dispatch<MAX_NSPREAD>(off1, off2, size1, size2, du, M, kx, ky, dd, opts);
 }
 
-template<uint8_t ns, bool kerevalmeth>
+template <uint8_t ns, bool kerevalmeth>
 SPREADKERNEL_NEVER_INLINE void spread_subproblem_3d_kernel(
     const BIGINT off1, const BIGINT off2, const BIGINT off3, const UBIGINT size1, const UBIGINT size2,
     const UBIGINT size3, FLT *SPREADKERNEL_RESTRICT du, const UBIGINT M, const FLT *kx, const FLT *ky, const FLT *kz,
@@ -886,7 +898,7 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_3d_kernel(
     }
 }
 
-template<uint8_t NS>
+template <uint8_t NS>
 void spread_subproblem_3d_dispatch(BIGINT off1, BIGINT off2, BIGINT off3, UBIGINT size1, UBIGINT size2, UBIGINT size3,
                                    FLT *du, UBIGINT M, const FLT *kx, const FLT *ky, const FLT *kz, const FLT *dd,
                                    const spreadkernel_opts &opts) noexcept {
@@ -927,7 +939,7 @@ du (size size1*size2*size3) is uniform complex output array
     spread_subproblem_3d_dispatch<MAX_NSPREAD>(off1, off2, off3, size1, size2, size3, du, M, kx, ky, kz, dd, opts);
 }
 
-template<bool thread_safe>
+template <bool thread_safe>
 void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
                          UBIGINT size2, UBIGINT size3, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                          FLT *SPREADKERNEL_RESTRICT data_uniform, const FLT *const du0)
@@ -1211,13 +1223,14 @@ FLT fold_rescale(const FLT x, const UBIGINT N) noexcept {
     return (result - floor(result)) * FLT(N);
 }
 
-template<class simd_type> simd_type fold_rescale(const simd_type &x, const BIGINT N) noexcept {
+template <class simd_type>
+simd_type fold_rescale(const simd_type &x, const BIGINT N) noexcept {
     const simd_type x2pi   = FLT(M_1_2PI);
     const simd_type result = xsimd::fma(x, x2pi, simd_type(0.5));
     return (result - xsimd::floor(result)) * simd_type(FLT(N));
 }
 
-template<uint8_t ns, uint8_t kerevalmeth, class T, class simd_type, typename... V>
+template <uint8_t ns, uint8_t kerevalmeth, class T, class simd_type, typename... V>
 auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, const V... elems) noexcept {
     /* Utility function that allows to move the kernel evaluation outside the spreader for
        clarity
@@ -1254,13 +1267,14 @@ auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, con
 
 namespace {
 
-template<class T, class V, size_t... Is>
+template <class T, class V, size_t... Is>
 constexpr T generate_sequence_impl(V a, V b, std::index_sequence<Is...>) noexcept {
     // utility function to generate a sequence of a, b interleaved as function arguments
     return T(((Is % 2 == 0) ? a : b)...);
 }
 
-template<class T, class V, std::size_t N> constexpr auto initialize_complex_register(V a, V b) noexcept {
+template <class T, class V, std::size_t N>
+constexpr auto initialize_complex_register(V a, V b) noexcept {
     // populates a SIMD register with a and b interleaved
     // for example:
     // +-------------------------------+
@@ -1275,7 +1289,8 @@ template<class T, class V, std::size_t N> constexpr auto initialize_complex_regi
 
 // this finds the largest SIMD instruction set that can handle N elements
 // void otherwise -> compile error
-template<class T, uint8_t N, uint8_t K> constexpr auto BestSIMDHelper() {
+template <class T, uint8_t N, uint8_t K>
+constexpr auto BestSIMDHelper() {
     if constexpr (N % K == 0) { // returns void in the worst case
         return xsimd::make_sized_batch<T, K>{};
     } else {
@@ -1283,7 +1298,8 @@ template<class T, uint8_t N, uint8_t K> constexpr auto BestSIMDHelper() {
     }
 }
 
-template<class T, uint8_t N> constexpr uint8_t min_simd_width() {
+template <class T, uint8_t N>
+constexpr uint8_t min_simd_width() {
     // finds the smallest simd width that can handle N elements
     // simd size is batch size the SIMD width in xsimd terminology
     if constexpr (std::is_void_v<xsimd::make_sized_batch_t<T, N>>) {
@@ -1293,7 +1309,8 @@ template<class T, uint8_t N> constexpr uint8_t min_simd_width() {
     }
 };
 
-template<class T, uint8_t N> constexpr auto find_optimal_simd_width() {
+template <class T, uint8_t N>
+constexpr auto find_optimal_simd_width() {
     // finds the smallest simd width that minimizes the number of iterations
     // NOTE: might be suboptimal for some cases 2^N+1 for example
     // in the future we might want to implement a more sophisticated algorithm
@@ -1310,13 +1327,15 @@ template<class T, uint8_t N> constexpr auto find_optimal_simd_width() {
     return optimal_simd_width;
 }
 
-template<class T, uint8_t N> constexpr auto GetPaddedSIMDWidth() {
+template <class T, uint8_t N>
+constexpr auto GetPaddedSIMDWidth() {
     // helper function to get the SIMD width with padding for the given number of elements
     // that minimizes the number of iterations
     return xsimd::make_sized_batch<T, find_optimal_simd_width<T, N>()>::type::size;
 }
 
-template<class T, uint8_t ns> constexpr auto get_padding() {
+template <class T, uint8_t ns>
+constexpr auto get_padding() {
     // helper function to get the padding for the given number of elements
     // ns is known at compile time, rounds ns to the next multiple of the SIMD width
     // then subtracts ns to get the padding using a bitwise and trick
@@ -1326,7 +1345,8 @@ template<class T, uint8_t ns> constexpr auto get_padding() {
     return ((ns + width - 1) & (-width)) - ns;
 }
 
-template<class T, uint8_t ns> constexpr auto get_padding_helper(uint8_t runtime_ns) {
+template <class T, uint8_t ns>
+constexpr auto get_padding_helper(uint8_t runtime_ns) {
     // helper function to get the padding for the given number of elements where ns is
     // known at runtime, it uses recursion to find the padding
     // this allows to avoid having a function with a large number of switch cases
@@ -1343,7 +1363,8 @@ template<class T, uint8_t ns> constexpr auto get_padding_helper(uint8_t runtime_
     }
 }
 
-template<class T> uint8_t get_padding(uint8_t ns) {
+template <class T>
+uint8_t get_padding(uint8_t ns) {
     // return the padding as a function of the number of elements
     // 2 * MAX_NSPREAD is the maximum number of elements that we can have
     // that's why is hardcoded here
@@ -1360,12 +1381,14 @@ struct zip_hi {
     // it returns index N/2, N/2, N/2+1, N/2+1, ... N, N
     static constexpr unsigned get(unsigned index, unsigned size) { return (size + index) / 2; }
 };
-template<unsigned cap> struct reverse_index {
+template <unsigned cap>
+struct reverse_index {
     static constexpr unsigned get(unsigned index, const unsigned size) {
         return index < cap ? (cap - 1 - index) : index;
     }
 };
-template<unsigned cap> struct shuffle_index {
+template <unsigned cap>
+struct shuffle_index {
     static constexpr unsigned get(unsigned index, const unsigned size) {
         return index < cap ? (cap - 1 - index) : size + size + cap - 1 - index;
     }
@@ -1378,7 +1401,8 @@ struct select_odd {
     static constexpr unsigned get(unsigned index, unsigned /*size*/) { return index * 2 + 1; }
 };
 
-template<typename T> auto xsimd_to_array(const T &vec) noexcept {
+template <typename T>
+auto xsimd_to_array(const T &vec) noexcept {
     constexpr auto alignment = T::arch_type::alignment();
     alignas(alignment) std::array<typename T::value_type, T::size> array{};
     vec.store_aligned(array.data());
@@ -1437,10 +1461,12 @@ TEST_CASE("SPREADKERNEL setup spreader") {
     UBIGINT N1 = 100, N2 = 100, N3 = 100;
     std::fill(opts.grid_delta, opts.grid_delta + 3, 1.0);
     opts.ker_half_width = 4;
-    opts.eps = 1e-7;
+    opts.eps            = 1e-7;
     opts.ker            = [](double x, const void *) {
-        return exp(-1.0 / (x * x));
+        return exp(-(x * x));
     };
 
     spread_kernel_init(N1, N2, N3, &opts);
+
+    CHECK(std::abs(opts.kerpoly.eval(1.2) - opts.ker(1.2, nullptr)) < opts.eps);
 }

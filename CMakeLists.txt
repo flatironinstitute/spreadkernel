@@ -7,6 +7,16 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+if (ipo_supported)
+  message(STATUS "IPO/LTO is supported")
+else()
+  message(WARNING "IPO/LTO is not supported: ${ipo_error}")
+endif()
+
+
 find_package(OpenMP REQUIRED)
 
 include(FetchContent)
@@ -50,6 +60,9 @@ add_library(spreadkernel SHARED src/spreadkernel.cpp src/polyfit.cpp src/doctest
 target_include_directories(spreadkernel PUBLIC include)
 target_link_libraries(spreadkernel PRIVATE xsimd OpenMP::OpenMP_CXX doctest spdlog::spdlog)
 target_compile_options(spreadkernel PRIVATE -march=native)
+if(ipo_supported AND (CMAKE_BUILD_TYPE STREQUAL "Release"))
+  set_target_properties(spreadkernel PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 add_executable(benchmark src/benchmark.cpp)
 target_link_libraries(benchmark PRIVATE spreadkernel nanobench)

@@ -4,18 +4,18 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <iostream>
 #include <limits>
 #include <tuple>
 #include <vector>
 
 namespace spreadkernel::polyfit {
 
-std::vector<double> vandermonde_inverse(int order, double *x) {
+template <typename Real>
+std::vector<Real> vandermonde_inverse(int order, Real *x) {
     // https://github.com/yveschris/possibly-the-fastest-analytical-inverse-of-vandermonde-matrices
     // No license was specified, though the algorithm is generally known
-    std::vector<double> p(order + 1);
-    std::vector<double> C(order);
+    std::vector<Real> p(order + 1);
+    std::vector<Real> C(order);
 
     C[0]         = 1;
     p[order - 1] = -x[0];
@@ -33,8 +33,8 @@ std::vector<double> vandermonde_inverse(int order, double *x) {
         }
     }
 
-    std::vector<double> Vinv(order * order);
-    std::vector<double> c(order);
+    std::vector<Real> Vinv(order * order);
+    std::vector<Real> c(order);
     for (int i = 0; i < order; i++) {
         c[order - 1] = 1;
         for (int j = order - 2; j >= 0; j--)
@@ -47,22 +47,24 @@ std::vector<double> vandermonde_inverse(int order, double *x) {
     return Vinv;
 }
 
-std::vector<double> linspaced(int n, double lb, double ub) {
-    std::vector<double> x(n);
+template <typename Real>
+std::vector<Real> linspaced(int n, Real lb, Real ub) {
+    std::vector<Real> x(n);
     for (int i = 0; i < n; i++)
         x[i] = lb + (ub - lb) * i / (n - 1);
 
     return x;
 }
 
-void fit(kernel_func f, double lb, double ub, int order, const void *data, double *coeffs, double offset) {
-    std::vector<double> x = linspaced(order, lb, ub);
+template <typename Real>
+void fit(kernel_func f, Real lb, Real ub, int order, const void *data, Real *coeffs, Real offset) {
+    std::vector<Real> x = linspaced(order, lb, ub);
 
-    std::vector<double> y(order);
+    std::vector<Real> y(order);
     for (int i = 0; i < order; i++)
         y[i] = f(x[i] + offset, data);
 
-    std::vector<double> Vinv = vandermonde_inverse(order, x.data());
+    std::vector<Real> Vinv = vandermonde_inverse(order, x.data());
     for (int i = 0; i < order; i++) {
         coeffs[order - i - 1] = 0;
         for (int j = 0; j < order; j++)
@@ -70,49 +72,54 @@ void fit(kernel_func f, double lb, double ub, int order, const void *data, doubl
     }
 }
 
-double eval(const double *coeffs, int order, double x) {
-    double y = coeffs[0];
+template <typename Real>
+inline Real eval(const Real *coeffs, int order, Real x) {
+    Real y = coeffs[0];
     for (auto j = 1; j < order; ++j)
         y = std::fma(y, x, coeffs[j]);
 
     return y;
 }
 
-std::vector<double> fit(kernel_func f, double lb, double ub, int order, const void *data) {
-    std::vector<double> coeffs(order);
+template <typename Real>
+std::vector<Real> fit(kernel_func f, Real lb, Real ub, int order, const void *data) {
+    std::vector<Real> coeffs(order);
     fit(f, lb, ub, order, data, coeffs.data(), 0.0);
     return coeffs;
 }
 
-double eval_multi(const std::vector<double> &coeffs, double x, double lb, double ub, int order, double h) {
-    const double half_h = 0.5 * h;
-    const int n         = coeffs.size() / order;
-    const int i         = std::min(n - 1, int((x - lb) / h));
-    const double x_i    = lb + half_h * (2 * i + 1);
+template <typename Real>
+Real eval_multi(const std::vector<Real> &coeffs, Real x, Real lb, Real ub, int order, Real h) {
+    const Real half_h = 0.5 * h;
+    const int n       = coeffs.size() / order;
+    const int i       = std::min(n - 1, int((x - lb) / h));
+    const Real x_i    = lb + half_h * (2 * i + 1);
     return eval(coeffs.data() + i * order, order, x - x_i);
 }
 
-void fit_multi(kernel_func f, double lb, double ub, int order, const void *data, double *coeffs, int n) {
-    const double half_h = (ub - lb) / (2 * n);
+template <typename Real>
+void fit_multi(kernel_func f, Real lb, Real ub, int order, const void *data, Real *coeffs, int n) {
+    const Real half_h = (ub - lb) / (2 * n);
 
     for (int i = 0; i < n; i++) {
-        const double offset = lb + half_h * (2 * i + 1);
+        const Real offset = lb + half_h * (2 * i + 1);
         fit(f, -half_h, half_h, order, data, coeffs + i * order, offset);
     }
 }
 
-std::tuple<double, double> get_errors_for_auto(kernel_func f, const std::vector<double> &sample_points,
-                                               const std::vector<double> &actual_vals, int order, const void *data,
-                                               const std::vector<double> &coeffs, double lb, double ub, double h,
-                                               const int n_samples, bool use_rel_error = false) {
-    double max_error = 0.0;
-    double avg_error = 0.0;
+template <typename Real>
+std::tuple<Real, Real> get_errors_for_auto(kernel_func f, const std::vector<Real> &sample_points,
+                                           const std::vector<Real> &actual_vals, int order, const void *data,
+                                           const std::vector<Real> &coeffs, Real lb, Real ub, Real h,
+                                           const int n_samples, bool use_rel_error = false) {
+    Real max_error = 0.0;
+    Real avg_error = 0.0;
 
     for (int i = 0; i < n_samples; i++) {
-        double x        = sample_points[i];
-        double y        = eval_multi(coeffs, x, lb, ub, order, h);
-        double actual_y = actual_vals[i];
-        double error    = use_rel_error ? std::abs(1.0 - y / actual_y) : std::abs(y - actual_y);
+        Real x        = sample_points[i];
+        Real y        = eval_multi(coeffs, x, lb, ub, order, h);
+        Real actual_y = actual_vals[i];
+        Real error    = use_rel_error ? std::abs(1.0 - y / actual_y) : std::abs(y - actual_y);
         avg_error += error;
         if (error > max_error) {
             max_error = error;
@@ -123,22 +130,23 @@ std::tuple<double, double> get_errors_for_auto(kernel_func f, const std::vector<
     return {avg_error, max_error};
 }
 
-std::vector<double> fit_multi_auto(kernel_func f, double lb, double ub, const void *data, int n_poly, double error_tol,
-                                   int min_order, int max_order, int n_samples) {
-    double ub_safe     = ub - std::numeric_limits<double>::epsilon();
+template <typename Real>
+std::vector<Real> fit_multi_auto(kernel_func f, Real lb, Real ub, const void *data, int n_poly, double error_tol,
+                                 int min_order, int max_order, int n_samples) {
+    Real ub_safe       = ub - std::numeric_limits<Real>::epsilon();
     uint64_t n_epsilon = 1;
     while (ub_safe == ub) {
-        ub_safe -= n_epsilon * std::numeric_limits<double>::epsilon();
+        ub_safe -= n_epsilon * std::numeric_limits<Real>::epsilon();
         n_epsilon *= 2;
     }
 
-    std::vector<double> x = linspaced(n_samples, lb, ub_safe);
-    std::vector<double> y(n_samples);
+    std::vector<Real> x = linspaced(n_samples, lb, ub_safe);
+    std::vector<Real> y(n_samples);
     for (int i = 0; i < n_samples; i++)
         y[i] = f(x[i], data);
 
     for (int order = min_order; order < max_order; order++) {
-        std::vector<double> coeffs(order * n_poly);
+        std::vector<Real> coeffs(order * n_poly);
         fit_multi(f, lb, ub, order, data, coeffs.data(), n_poly);
 
         auto [avg_rel_error, max_rel_error] =
@@ -146,25 +154,48 @@ std::vector<double> fit_multi_auto(kernel_func f, double lb, double ub, const vo
         if (avg_rel_error < error_tol) return coeffs;
     }
 
-    return std::vector<double>();
+    return std::vector<Real>();
 }
 
-void eval_grid(const std::vector<double> &coeffs, double x, double lb, double ub, int order, int n, double *output) {
-    const double h      = (ub - lb) / n;
-    const double half_h = 0.5 * h;
-    const int i         = (x - lb) / h;
-    const double dx     = x - (lb + half_h * (2 * i + 1));
+template <typename Real>
+void eval_grid(const std::vector<Real> &coeffs, Real x, Real lb, Real ub, int order, int n, Real *output) {
+    const Real h      = (ub - lb) / n;
+    const Real half_h = 0.5 * h;
+    const int i       = (x - lb) / h;
+    const Real dx     = x - (lb + half_h * (2 * i + 1));
     for (int j = 0; j < n; j++)
         output[j] = eval(coeffs.data() + j * order, order, dx);
 }
 
-double abs_error(const std::vector<double> &y1, const std::vector<double> &y2) {
-    double error = 0.0;
+template <typename Real>
+Real abs_error(const std::vector<Real> &y1, const std::vector<Real> &y2) {
+    Real error = 0.0;
     for (int i = 0; i < y1.size(); i++)
         error += std::abs(y1[i] - y2[i]);
 
     return error / y1.size();
 }
+
+template <typename Real>
+Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real lb, Real ub, int n_poly, double tol, int min_order,
+                       int max_order, int n_samples)
+    : lb(lb), ub(ub), n_poly(n_poly), h((ub - lb) / n_poly) {
+    inv_h  = 1.0 / h;
+    half_h = 0.5 * h;
+    coeffs = fit_multi_auto(f, lb, ub, data, n_poly, tol, min_order, max_order, n_samples);
+    order  = coeffs.size() / n_poly;
+}
+
+template <typename Real>
+Real Polyfit<Real>::eval(Real x) const {
+    const int i    = std::min(n_poly - 1, int(inv_h * (x - lb)));
+    const Real x_i = lb + half_h * (2 * i + 1);
+    return spreadkernel::polyfit::eval(coeffs.data() + i * order, order, x - x_i);
+}
+
+template class Polyfit<float>;
+template class Polyfit<double>;
+
 } // namespace spreadkernel::polyfit
 
 TEST_CASE("SPREADKERNEL fits/evals") {
@@ -224,4 +255,11 @@ TEST_CASE("SPREADKERNEL fits/evals") {
     for (int i = 0; i < n_samples; i++)
         y_auto[i] = eval_multi(coeffs_auto, x[i], lb, ub, auto_order, h);
     CHECK(abs_error(y_auto, yraw) < tol);
+
+    Polyfit polyfit(f, data, lb, ub, n_poly, tol, min_order, max_order, n_samples);
+    std::vector<double> y_polyfit(n_samples);
+    for (int i = 0; i < n_samples; i++)
+        y_polyfit[i] = polyfit(x[i]);
+
+    CHECK(abs_error(y_polyfit, yraw) < tol);
 }

@@ -5,7 +5,7 @@
 #include <tuple>
 #include <vector>
 
-template<int Ns, typename T>
+template <int Ns, typename T>
 void spread2d_finufft(const std::vector<T> &ker_x, const std::vector<T> &ker_y, const std::vector<int> &sx,
                       const std::vector<int> &sy, int Nx, int Ny, int M, T *SPREADKERNEL_RESTRICT out) {
     memset(out, 0, Nx * Ny * sizeof(T));
@@ -20,7 +20,7 @@ void spread2d_finufft(const std::vector<T> &ker_x, const std::vector<T> &ker_y, 
     }
 }
 
-template<int Ns, typename T>
+template <int Ns, typename T>
 void spread2d_naive_output(const std::vector<T> &ker_x, const std::vector<T> &ker_y, const std::vector<int> &sx,
                            const std::vector<int> &sy, int Nx, int Ny, int M, T *SPREADKERNEL_RESTRICT out) {
     memset(out, 0, Nx * Ny * sizeof(T));
@@ -38,7 +38,7 @@ void spread2d_naive_output(const std::vector<T> &ker_x, const std::vector<T> &ke
     }
 }
 
-template<int Ns, typename T>
+template <int Ns, typename T>
 void spread2d_naive_output_wide_kernel(const std::vector<T> &ker_x, const std::vector<T> &ker_y,
                                        const std::vector<int> &sx, const std::vector<int> &sy, int Nx, int Ny, int M,
                                        T *SPREADKERNEL_RESTRICT out) {
@@ -50,7 +50,7 @@ void spread2d_naive_output_wide_kernel(const std::vector<T> &ker_x, const std::v
                 out[y * Nx + x] += ker_x[x + i * Nx] * ker_y[y + i * Ny];
 }
 
-template<int Ns, typename T>
+template <int Ns, typename T>
 std::tuple<std::vector<T>, std::vector<T>, std::vector<int>, std::vector<int>> generate_data(
     int Nx, int Ny, int M, bool wide_kernel = false) {
     std::vector<T> ker_x(Ns * M);

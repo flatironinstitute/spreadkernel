@@ -1,7 +1,7 @@
 #ifndef SPREADKERNEL_H
 #define SPREADKERNEL_H
 
-#include <vector>
+#include <polyfit.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -97,7 +97,7 @@ typedef struct spreadkernel_opts {
     spreadkernel_kernel_func ker = nullptr;    // ptr to the kernel function
     void *ker_data               = nullptr;    // ptr to the kernel data (e.g. constants to modify your kernel func)
     double eps                   = 1e-7;       // error tolerance for kernel approximation
-    std::vector<double> coeffs;                // coefficients for Horner polynomial
+    spreadkernel::polyfit::Polyfit<double> kerpoly; // Horner polynomial object
 } spreadkernel_opts;
 
 #ifdef __cplusplus

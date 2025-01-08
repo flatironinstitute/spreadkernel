@@ -13,6 +13,7 @@ AllowShortLambdasOnASingleLine: Inline
 AllowShortLoopsOnASingleLine: false
 BreakBeforeBraces: Attach
 BreakBeforeBinaryOperators: None
+BreakTemplateDeclarations: true
 ColumnLimit: 119
 ExperimentalAutoDetectBinPacking: true
 FixNamespaceComments: true
@@ -27,7 +28,7 @@ SortUsingDeclarations: true
 SpacesBeforeTrailingComments: 1
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
-SpaceAfterTemplateKeyword: false
+SpaceAfterTemplateKeyword: true
 TabWidth: 4
 UseTab: Never
 ...
