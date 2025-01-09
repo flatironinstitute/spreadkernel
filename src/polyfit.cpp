@@ -1,8 +1,6 @@
 #include <polyfit.h>
-#include <spreadkernel.h>
 
 #include <doctest/doctest.h>
-#include <type_traits>
 #include <xsimd/xsimd.hpp>
 
 #include <algorithm>
@@ -11,21 +9,23 @@
 #include <cstdint>
 #include <limits>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 namespace { // anonymous namespace for internal structs equivalent to declaring everything
             // static
-struct zip_low;
-struct zip_hi;
 template <unsigned cap>
-struct reverse_index;
+struct reverse_index {
+    static constexpr unsigned get(unsigned index, const unsigned size) {
+        return index < cap ? (cap - 1 - index) : index;
+    }
+};
 template <unsigned cap>
-struct shuffle_index;
-struct select_even;
-struct select_odd;
-// forward declaration to clean up the code and be able to use this everywhere in the file
-template <class T, uint8_t N, uint8_t K = N>
-static constexpr auto BestSIMDHelper();
+struct shuffle_index {
+    static constexpr unsigned get(unsigned index, const unsigned size) {
+        return index < cap ? (cap - 1 - index) : size + size + cap - 1 - index;
+    }
+};
 
 template <class T, uint8_t N = 1>
 constexpr uint8_t min_simd_width() {
@@ -65,24 +65,14 @@ constexpr auto GetPaddedSIMDWidth() {
 
 template <class T, uint8_t N>
 using PaddedSIMD = typename xsimd::make_sized_batch<T, GetPaddedSIMDWidth<T, N>()>::type;
-template <class T>
-uint8_t get_padding(uint8_t ns);
-template <class T, uint8_t ns>
-constexpr auto get_padding();
-template <class T, uint8_t N>
-using BestSIMD = typename decltype(BestSIMDHelper<T, N, xsimd::batch<T>::size>())::type;
-// template <class arch_t>
-// constexpr auto zip_low_index = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, zip_low>();
-// template <class arch_t>
-// constexpr auto zip_hi_index = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, zip_hi>();
-// template <class arch_t>
-// constexpr auto select_even_mask = xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t,
-// select_even>(); template <class arch_t> constexpr auto select_odd_mask =
-// xsimd::make_batch_constant<xsimd::as_unsigned_integer_t<FLT>, arch_t, select_odd>(); template <typename T>
-// SPREADKERNEL_ALWAYS_INLINE auto xsimd_to_array(const T &vec) noexcept;
+
 } // namespace
 
 namespace spreadkernel::polyfit {
+std::array<std::array<evaluator<float>, SPREADKERNEL_MAX_WIDTH + 1>, SPREADKERNEL_MAX_ORDER + 1> float_evaluators{
+    {nullptr}};
+std::array<std::array<evaluator<double>, SPREADKERNEL_MAX_WIDTH + 1>, SPREADKERNEL_MAX_ORDER + 1> double_evaluators{
+    {nullptr}};
 
 template <typename Real>
 std::vector<Real> vandermonde_inverse(int order, Real *x) {
@@ -343,41 +333,95 @@ double abs_error(const auto &y1, const auto &y2) {
 }
 
 template <typename Real>
-Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real lb, Real ub, int n_poly, double tol, int min_order,
+Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real lb, Real ub, int width, double tol, int min_order,
                        int max_order, int n_samples)
-    : lb(lb), ub(ub), n_poly(n_poly), h((ub - lb) / n_poly) {
-    inv_h  = 1.0 / h;
-    half_h = 0.5 * h;
-    coeffs = fit_multi_auto(f, lb, ub, data, n_poly, tol, min_order, max_order, n_samples);
-    order  = coeffs.size() / n_poly;
+    : lb(lb), ub(ub), width(width), h((ub - lb) / width) {
+    inv_h      = 1.0 / h;
+    half_h     = 0.5 * h;
+    coeffs_vec = fit_multi_auto(f, lb, ub, data, width, tol, min_order, max_order, n_samples);
+    order      = coeffs_vec.size() / width;
+    if constexpr (std::is_same_v<float, Real>)
+        vec_eval = float_evaluators[width][order];
+    else if constexpr (std::is_same_v<double, Real>)
+        vec_eval = double_evaluators[width][order];
+
+    for (int i = 0; i < width; ++i)
+        for (int j = 0; j < order; ++j)
+            coeffs_arr[j][i] = coeffs_vec[i * order + j];
 }
 
 template <typename Real>
 Real Polyfit<Real>::eval(Real x) const {
-    const int i    = std::min(n_poly - 1, int(inv_h * (x - lb)));
+    const int i    = std::min(width - 1, int(inv_h * (x - lb)));
     const Real x_i = lb + half_h * (2 * i + 1);
-    return spreadkernel::polyfit::eval(coeffs.data() + i * order, order, x - x_i);
+    return spreadkernel::polyfit::eval(coeffs_vec.data() + i * order, order, x - x_i);
+}
+
+template <typename Real>
+void Polyfit<Real>::eval(Real x, Real *SPREADKERNEL_RESTRICT y) const {
+    vec_eval(y, coeffs_arr, x);
+}
+
+template <typename Real, int Width = SPREADKERNEL_MAX_WIDTH, int Order = SPREADKERNEL_MAX_ORDER>
+bool fill_evaluators(auto &eval) {
+    eval[Width][Order] = eval_kernel_vec_horner<Width, Order, PaddedSIMD<Real, Width>>;
+    if constexpr (Width == SPREADKERNEL_MIN_WIDTH && Order == SPREADKERNEL_MIN_ORDER)
+        return true;
+    else if constexpr (Order == SPREADKERNEL_MIN_ORDER)
+        return fill_evaluators<Real, Width - 1, SPREADKERNEL_MAX_ORDER>(eval);
+    else
+        return fill_evaluators<Real, Width, Order - 1>(eval);
 }
 
 template class Polyfit<float>;
 template class Polyfit<double>;
 
+bool ffilled = fill_evaluators<float>(float_evaluators);
+bool dfilled = fill_evaluators<double>(double_evaluators);
+
 } // namespace spreadkernel::polyfit
+
+TEST_CASE("SPREADKERNEL Polyfit vector eval") {
+    using namespace spreadkernel::polyfit;
+    const double lb  = -0.7;
+    const double ub  = 0.8;
+    const double tol = 1E-8;
+    const int width  = 7;
+    const double h   = (ub - lb) / width;
+
+    kernel_func f = [](double x, const void *data) {
+        return exp(-x * x);
+    };
+
+    Polyfit<double> polyfit(f, nullptr, lb, ub, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
+
+    alignas(64) std::array<double, width> res;
+    alignas(64) std::array<double, width> res_vec;
+    const double dx = h * 0.3;
+    polyfit(dx, res_vec.data());
+    for (int i = 0; i < width; ++i) {
+        const double x = lb + (i + 0.5) * h + dx;
+        res[i]         = polyfit(x);
+    }
+
+    for (int i = 0; i < width; ++i)
+        CHECK(std::abs(res[i] - res_vec[i]) < std::numeric_limits<double>::epsilon());
+}
 
 TEST_CASE("SPREADKERNEL fits/evals") {
     using namespace spreadkernel::polyfit;
     const double lb       = -0.7;
     const double ub       = 0.8;
-    const int order       = 16;
+    const int order       = SPREADKERNEL_MAX_ORDER;
     const int n_samples   = 100;
     const int max_order   = SPREADKERNEL_MAX_ORDER;
     const int min_order   = SPREADKERNEL_MIN_ORDER;
     const int width       = 7;
     const double h        = (ub - lb) / width;
-    const int multi_order = 8;
+    const int multi_order = 7;
     const double tol      = 1E-8;
+    const void *data      = nullptr;
 
-    void *data    = NULL;
     kernel_func f = [](double x, const void *data) {
         return sin(pow(x, 2) * cos(x));
     };
@@ -402,9 +446,10 @@ TEST_CASE("SPREADKERNEL fits/evals") {
         for (int j = 0; j < multi_order; ++j)
             coeffs_arr[j][i] = coeffs_multi[i * multi_order + j];
 
-    alignas(32) std::array<double, width> res_vec{0.0};
-    alignas(32) std::array<double, width> res_scalar{0.0};
-    eval_kernel_vec_horner<width, multi_order, PaddedSIMD<double, width>>(res_vec.data(), coeffs_arr, 0.1);
+    alignas(64) std::array<double, width> res_vec{0.0};
+    alignas(64) std::array<double, width> res_scalar{0.0};
+    const double dx = 0.1;
+    eval_kernel_vec_horner<width, multi_order, PaddedSIMD<double, width>>(res_vec.data(), coeffs_arr, dx);
     for (int i = 0; i < width; ++i)
         res_scalar[i] = eval(coeffs_multi.data() + i * multi_order, multi_order, 0.1);
 

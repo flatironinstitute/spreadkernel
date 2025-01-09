@@ -3,6 +3,8 @@
 
 #include <polyfit.h>
 
+#include <spreadkernel_defs.h>
+
 #ifdef _OPENMP
 #include <omp.h>
 // point to actual omp utils
@@ -16,33 +18,6 @@ static inline int MY_OMP_GET_NUM_THREADS() { return 1; }
 static inline int MY_OMP_GET_MAX_THREADS() { return 1; }
 static inline int MY_OMP_GET_THREAD_NUM() { return 0; }
 static inline void MY_OMP_SET_NUM_THREADS(int) {}
-#endif
-
-#define SPREADKERNEL_MIN_ORDER 2
-#define SPREADKERNEL_MAX_WIDTH 16
-#define SPREADKERNEL_MAX_ORDER 16
-
-#if defined(_MSC_VER)
-#define SPREADKERNEL_ALWAYS_INLINE __forceinline inline
-#define SPREADKERNEL_NEVER_INLINE  __declspec(noinline)
-#define SPREADKERNEL_RESTRICT      __restrict
-#define SPREADKERNEL_UNREACHABLE   __assume(0)
-#define SPREADKERNEL_UNLIKELY(x)   (x)
-#define SPREADKERNEL_LIKELY(x)     (x)
-#elif defined(__GNUC__) || defined(__clang__)
-#define SPREADKERNEL_ALWAYS_INLINE __attribute__((always_inline)) inline
-#define SPREADKERNEL_NEVER_INLINE  __attribute__((noinline))
-#define SPREADKERNEL_RESTRICT      __restrict__
-#define SPREADKERNEL_UNREACHABLE   __builtin_unreachable()
-#define SPREADKERNEL_UNLIKELY(x)   __builtin_expect(!!(x), 0)
-#define SPREADKERNEL_LIKELY(x)     __builtin_expect(!!(x), 1)
-#else
-#define SPREADKERNEL_ALWAYS_INLINE inline
-#define SPREADKERNEL_NEVER_INLINE
-#define SPREADKERNEL_RESTRICT
-#define SPREADKERNEL_UNREACHABLE
-#define SPREADKERNEL_UNLIKELY(x) (x)
-#define SPREADKERNEL_LIKELY(x)   (x)
 #endif
 
 enum {
