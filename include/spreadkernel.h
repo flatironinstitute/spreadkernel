@@ -18,6 +18,10 @@ static inline int MY_OMP_GET_THREAD_NUM() { return 0; }
 static inline void MY_OMP_SET_NUM_THREADS(int) {}
 #endif
 
+#define SPREADKERNEL_MIN_ORDER 2
+#define SPREADKERNEL_MAX_WIDTH 16
+#define SPREADKERNEL_MAX_ORDER 16
+
 #if defined(_MSC_VER)
 #define SPREADKERNEL_ALWAYS_INLINE __forceinline inline
 #define SPREADKERNEL_NEVER_INLINE  __declspec(noinline)
