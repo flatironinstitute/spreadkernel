@@ -70,3 +70,7 @@ target_compile_options(benchmark PRIVATE -march=native)
 
 add_executable(run_tests test/run_tests.cpp)
 target_link_libraries(run_tests PRIVATE spreadkernel doctest)
+
+include(CTest)
+include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
+doctest_discover_tests(run_tests)
