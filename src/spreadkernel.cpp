@@ -341,22 +341,20 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
 
 void setup_spreader(spreadkernel_opts &opts, int dim) {
     if (opts.max_subproblem_size == 0) opts.max_subproblem_size = (dim == 1) ? 10000 : 100000;
-    opts.nspread = 2 * opts.ker_half_width / opts.grid_delta[0];
+    assert(opts.nspread >= SPREADKERNEL_MIN_WIDTH);
+    assert(opts.nspread <= SPREADKERNEL_MAX_WIDTH);
     assert(opts.ker);
-    assert(opts.ker_half_width > 0);
     assert(opts.grid_delta[0] > 0);
     assert(opts.nspread >= SPREADKERNEL_MIN_WIDTH);
     assert(opts.nspread <= SPREADKERNEL_MAX_WIDTH);
-    assert(std::abs(opts.nspread - 2 * opts.ker_half_width / opts.grid_delta[0]) <
-           10 * std::numeric_limits<double>::epsilon());
 
     if (opts.kerevalmeth)
-        opts.kerpoly = polyfit::Polyfit(opts.ker, opts.ker_data, -opts.ker_half_width, opts.ker_half_width,
-                                        opts.nspread, opts.eps, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
+        opts.kerpoly = polyfit::Polyfit(opts.ker, opts.ker_data, opts.grid_delta[0], opts.nspread, opts.eps,
+                                        SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
 }
 
 SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts) {
-    if (abs(x) >= opts.ker_half_width)
+    if (abs(x) >= opts.kerpoly.ub)
         return 0.0;
     else
         return opts.ker(x, opts.ker_data);
@@ -395,10 +393,10 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     alignas(alignment) std::array<FLT, n_parts * simd_size> ker{0};
     std::fill(du, du + size1, 0);
 
-    const FLT h              = opts.grid_delta[0]; // grid spacing
-    const FLT inv_h          = 1.0 / h;            // inverse grid spacing
-    const FLT ker_half_width = opts.ker_half_width;
-    const FLT lb1            = off1 * h;           // left bound of the subgrid
+    const FLT h              = opts.grid_delta[0];     // grid spacing
+    const FLT inv_h          = 1.0 / h;                // inverse grid spacing
+    const FLT ker_half_width = 0.5 * opts.nspread * h; // half width of the kernel
+    const FLT lb1            = off1 * h;               // left bound of the subgrid
     for (uint64_t i = 0; i < M; i++) {
         const auto dd_pt  = simd_type(dd[i]);
         const auto dx     = kx[i] - lb1 - ker_half_width;           // x-location of first NU pt in fine grid
@@ -843,9 +841,9 @@ TEST_CASE("SPREADKERNEL setup spreader") {
     spreadkernel_opts opts;
     UBIGINT N1 = 100, N2 = 100, N3 = 100;
     std::fill(opts.grid_delta, opts.grid_delta + 3, 1.0);
-    opts.ker_half_width = 4;
-    opts.eps            = 1e-7;
-    opts.ker            = [](double x, const void *) {
+    opts.nspread = 6;
+    opts.eps     = 1e-7;
+    opts.ker     = [](double x, const void *) {
         return exp(-(x * x));
     };
 

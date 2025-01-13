@@ -277,13 +277,14 @@ double abs_error(const auto &y1, const auto &y2) {
 }
 
 template <typename Real>
-Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real lb, Real ub, int width, double tol, int min_order,
-                       int max_order, int n_samples)
-    : lb(lb), ub(ub), width(width), h((ub - lb) / width) {
-    inv_h      = 1.0 / h;
-    half_h     = 0.5 * h;
+Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real h, int n_spread, double tol, int min_order, int max_order,
+                       int n_samples)
+    : lb(-0.5 * n_spread * h), ub(0.5 * n_spread * h), width(n_spread), h(h), half_h(0.5 * h), inv_h(1.0 / h) {
+
     coeffs_vec = fit_multi_auto(f, lb, ub, data, width, tol, min_order, max_order, n_samples);
     order      = coeffs_vec.size() / width;
+    assert(order * width == coeffs_vec.size());
+
     if constexpr (std::is_same_v<float, Real>)
         vec_eval = float_evaluators[width][order];
     else if constexpr (std::is_same_v<double, Real>)
@@ -328,7 +329,7 @@ bool dfilled = fill_evaluators<double>(double_evaluators);
 TEST_CASE("SPREADKERNEL Polyfit vector eval") {
     using namespace spreadkernel::polyfit;
     const double lb  = -0.7;
-    const double ub  = 0.8;
+    const double ub  = 0.7;
     const double tol = 1E-8;
     const int width  = 7;
     const double h   = (ub - lb) / width;
@@ -337,7 +338,7 @@ TEST_CASE("SPREADKERNEL Polyfit vector eval") {
         return exp(-x * x);
     };
 
-    Polyfit<double> polyfit(f, nullptr, lb, ub, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
+    Polyfit<double> polyfit(f, nullptr, h, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
 
     alignas(64) std::array<double, width> res;
     alignas(64) std::array<double, width> res_vec;
@@ -355,7 +356,7 @@ TEST_CASE("SPREADKERNEL Polyfit vector eval") {
 TEST_CASE("SPREADKERNEL fits/evals") {
     using namespace spreadkernel::polyfit;
     const double lb       = -0.7;
-    const double ub       = 0.8;
+    const double ub       = 0.7;
     const int order       = SPREADKERNEL_MAX_ORDER;
     const int n_samples   = 100;
     const int max_order   = SPREADKERNEL_MAX_ORDER;
@@ -422,7 +423,7 @@ TEST_CASE("SPREADKERNEL fits/evals") {
         y_auto[i] = eval_multi(coeffs_auto, x[i], lb, ub, auto_order, h);
     CHECK(abs_error(y_auto, yraw) < tol);
 
-    Polyfit polyfit(f, data, lb, ub, width, tol, min_order, max_order, n_samples);
+    Polyfit polyfit(f, data, h, width, tol, min_order, max_order, n_samples);
     std::vector<double> y_polyfit(n_samples);
     for (int i = 0; i < n_samples; i++)
         y_polyfit[i] = polyfit(x[i]);

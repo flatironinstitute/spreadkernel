@@ -76,7 +76,7 @@ using evaluator = void (*)(Real *SPREADKERNEL_RESTRICT,
 template <typename Real>
 class Polyfit {
   public:
-    Polyfit(kernel_func f, const void *data, Real lb, Real ub, int n_poly, double tol, int min_order, int max_order,
+    Polyfit(kernel_func f, const void *data, Real h, int n_spread, double tol, int min_order, int max_order,
             int n_samples);
     Polyfit() = default;
 
@@ -85,7 +85,6 @@ class Polyfit {
     void operator()(Real x, Real *SPREADKERNEL_RESTRICT y) const { eval(x, y); }
     Real operator()(Real x) const { return eval(x); }
 
-  private:
     Real lb{0.0}, ub{0.0};
     int width{0};
     int order{0};

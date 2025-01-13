@@ -72,7 +72,6 @@ typedef struct spreadkernel_opts {
     double lower_bounds[3]  = {0.0, 0.0, 0.0}; // lower bounds of the uniform grid
     double grid_delta[3]    = {0.0, 0.0, 0.0}; // grid spacing
     int periodicity[3]      = {0, 0, 0};       // 0: no, 1: yes
-    double ker_half_width   = 0.0;             // half the kernel width in real units
     spreadkernel_kernel_func ker = nullptr;    // ptr to the kernel function
     void *ker_data               = nullptr;    // ptr to the kernel data (e.g. constants to modify your kernel func)
     double eps                   = 1e-7;       // error tolerance for kernel approximation
