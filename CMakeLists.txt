@@ -65,7 +65,7 @@ if(ipo_supported AND (CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 
 add_executable(benchmark src/benchmark.cpp)
-target_link_libraries(benchmark PRIVATE spreadkernel nanobench)
+target_link_libraries(benchmark PRIVATE spreadkernel nanobench xsimd)
 target_compile_options(benchmark PRIVATE -march=native)
 
 add_executable(run_tests test/run_tests.cpp)
