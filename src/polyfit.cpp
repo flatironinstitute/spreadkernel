@@ -328,8 +328,8 @@ TEST_CASE("SPREADKERNEL Polyfit vector eval") {
     Polyfit<double> polyfit(f, nullptr, h, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
     REQUIRE(polyfit.order);
 
-    alignas(64) std::array<double, width> res;
-    alignas(64) std::array<double, width> res_vec;
+    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res;
+    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_vec;
     const double dx = h * 0.3;
     polyfit(dx, res_vec.data());
     for (int i = 0; i < width; ++i) {
@@ -379,8 +379,8 @@ TEST_CASE("SPREADKERNEL fits/evals") {
         for (int j = 0; j < multi_order; ++j)
             coeffs_arr[j][i] = coeffs_multi[i * multi_order + j];
 
-    alignas(64) std::array<double, width> res_vec{0.0};
-    alignas(64) std::array<double, width> res_scalar{0.0};
+    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_vec{0.0};
+    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_scalar{0.0};
     const double dx = 0.1;
     eval_kernel_vec_horner<width, multi_order, PaddedSIMD<double, width>>(res_vec.data(), coeffs_arr, dx);
     for (int i = 0; i < width; ++i)

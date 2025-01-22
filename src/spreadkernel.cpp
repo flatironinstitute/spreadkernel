@@ -380,30 +380,32 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     static constexpr auto alignment = arch_t::alignment();
     static constexpr auto simd_size = simd_type::size;
     static constexpr auto n_parts   = ns / simd_size + (ns % simd_size > 0);
+    static constexpr auto tot_size  = n_parts * simd_size;
+    static_assert(n_parts > 0, "n_parts must be greater than 0");
 
     alignas(alignment) std::array<FLT, n_parts * simd_size> ker{0};
     std::fill(du, du + size1, 0);
 
-    const FLT h              = opts.grid_delta[0];          // grid spacing
-    const FLT half_h         = 0.5 * h;                     // half grid spacing
-    const FLT inv_h          = 1.0 / h;                     // inverse grid spacing
-    const FLT ker_half_width = 0.5 * opts.nspread * h;      // half width of the kernel
-    const FLT lb1            = off1 * h;                    // left bound of the subgrid
+    const FLT h              = opts.grid_delta[0];        // grid spacing
+    const FLT half_h         = 0.5 * h;                   // half grid spacing
+    const FLT inv_h          = 1.0 / h;                   // inverse grid spacing
+    const FLT ker_half_width = 0.5 * opts.nspread * h;    // half width of the kernel
+    const FLT lb1            = off1 * h;                  // left bound of the subgrid
     for (uint64_t i = 0; i < M; i++) {
-        const auto dx     = kx[i] - lb1 - ker_half_width;   // x location for first kernel eval
-        const BIGINT j    = inv_h * (dx + half_h);          // bin index for first kernel eval
-        const auto dx_min = kx[i] - ker_half_width - j * h; // distance to the leftmost grid point in eval
+        const auto dx     = kx[i] - lb1 - ker_half_width; // x location for first kernel eval
+        const BIGINT j    = inv_h * (dx + half_h);        // bin index for first kernel eval
+        const auto dx_min = dx - j * h;                   // distance to the leftmost grid point in eval
         assert(std::abs(dx_min) <= half_h);
 
         opts.kerpoly(dx_min, ker.data());         // evaluate the kernel
         auto *SPREADKERNEL_RESTRICT trg = du + j; // restrict helps compiler to vectorize
 
         const auto dd_pt = simd_type(dd[i]);
-        for (uint8_t part; part < n_parts; part += simd_size) {
-            const auto ker0  = simd_type::load_aligned(ker.data() + part);
-            const auto du_pt = simd_type::load_unaligned(trg + part);
+        for (uint8_t offset = 0; offset < tot_size; offset += simd_size) {
+            const auto ker0  = simd_type::load_aligned(ker.data() + offset);
+            const auto du_pt = simd_type::load_unaligned(trg + offset);
             const auto res   = xsimd::fma(ker0, dd_pt, du_pt);
-            res.store_unaligned(trg + part);
+            res.store_unaligned(trg + offset);
         }
     }
 }
@@ -847,9 +849,8 @@ TEST_CASE("SPREADKERNEL setup spreader") {
 
 TEST_CASE("SPREADKERNEL 1d subproblem") {
     spreadkernel_opts opts;
-    UBIGINT N1 = 100, N2 = 1, N3 = 1;
-    UBIGINT M = 100;
-    std::fill(opts.grid_delta, opts.grid_delta + 3, 1.0);
+    const UBIGINT N1 = 100, N2 = 1, N3 = 1;
+    std::fill(opts.grid_delta, opts.grid_delta + 3, 1.3);
     opts.kerevalmeth = SPREADKERNEL_EVAL_HORNER_DIRECT;
     opts.nspread     = 5;
     opts.eps         = 1e-7;
@@ -857,18 +858,27 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
         return exp(-(x * x));
     };
 
+    // Initialization required for all subcases
     spread_kernel_init(N1, N2, N3, &opts);
     REQUIRE(opts.kerpoly.order);
 
     constexpr auto simd_size = xsimd::simd_type<FLT>::size;
-    std::vector<FLT> data_uniform(N1);
-    data_uniform.reserve(N1);
-    std::vector<FLT> data_nonuniform(M + simd_size);
-    std::vector<FLT> kx(M);
+    std::vector<FLT> outgrid_split_eval(N1), outgrid_single_eval(N1);
 
-    FLT test_x   = 0.5 * opts.nspread;
-    FLT test_str = 1.0;
-    spreadkernel::spread_subproblem_1d(0, N1, data_uniform.data(), 1, &test_x, &test_str, opts);
+    // Exact center of the kernel. On center gridpoint when nspread is odd
+    FLT test_x[]   = {0.5 * opts.nspread * opts.grid_delta[0], 1.5 * opts.nspread * opts.grid_delta[0]};
+    FLT test_str[] = {1.32, 1.32};
+    // spread with no offset about center gridpoint
+    spreadkernel::spread_subproblem_1d(0, N1, outgrid_split_eval.data(), 1, test_x, test_str, opts);
+    // spread with nspread offset about offset center gridpoint
+    spreadkernel::spread_subproblem_1d(opts.nspread, N1 - opts.nspread, outgrid_split_eval.data() + opts.nspread, 1,
+                                       &test_x[1], &test_str[1], opts);
 
-    CHECK(std::abs(data_uniform[2] - 1.0) < 1E-7);
+    CHECK(std::abs(outgrid_split_eval[2] - test_str[0]) < 1E-7);
+    CHECK(std::abs(outgrid_split_eval[2 + opts.nspread] - test_str[1]) < 1E-7);
+
+    // Single eval for both points. Should have identical results to 'split' eval
+    spreadkernel::spread_subproblem_1d(0, N1, outgrid_single_eval.data(), 2, test_x, test_str, opts);
+    for (int i = 0; i < 2 * opts.nspread; i++)
+        CHECK(outgrid_split_eval[i] == outgrid_single_eval[i]);
 }
