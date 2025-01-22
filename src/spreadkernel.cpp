@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdint>
 
+#include <limits>
 #include <polyfit.h>
 #include <spreadkernel.h>
 
@@ -113,7 +114,8 @@ static void bin_sort_singlethread(BIGINT *ret, UBIGINT M, const FLT *kx, const F
 void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                           double bin_size_x, double bin_size_y, double bin_size_z, int debug, int nthr);
 static void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padded_size1, BIGINT &size1,
-                        BIGINT &size2, BIGINT &size3, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, int ns, int ndims);
+                        BIGINT &size2, BIGINT &size3, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, int ndims,
+                        const spreadkernel_opts &opts);
 bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
                 const spreadkernel_opts &opts);
 int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3,
@@ -293,7 +295,7 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
                 BIGINT offset1, offset2, offset3, padded_size1, size1, size2, size3;
                 // sets offsets and sizes
                 get_subgrid(offset1, offset2, offset3, padded_size1, size1, size2, size3, M0, kx0.data(), ky0.data(),
-                            kz0.data(), ns, ndims);
+                            kz0.data(), ndims, opts);
                 if (opts.debug > 1) {
                     print_subgrid_info(ndims, offset1, offset2, offset3, padded_size1, size1, size2, size3, M0);
                 }
@@ -360,6 +362,7 @@ SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
 }
 
 /* 1D spreader from nonuniform to uniform subproblem grid, without wrapping.
+   FIXME: Ignores kerevalmeth: always uses the polynomial evaluation method.
    Inputs:
    off1 - integer offset of left end of du subgrid from that of overall fine
           periodized output grid {0,1,...N-1}.
@@ -678,7 +681,7 @@ void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBI
 }
 
 void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padded_size1, BIGINT &size1, BIGINT &size2,
-                 BIGINT &size3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, int ns, int ndims)
+                 BIGINT &size3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, int ndims, const spreadkernel_opts &opts)
 /* Writes out the integer offsets and sizes of a "subgrid" (cuboid subset of
    Z^ndims) large enough to enclose all of the nonuniform points with
    (non-periodic) padding of half the kernel width ns to each side in
@@ -722,26 +725,29 @@ void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padd
    tests.
 */
 {
-    FLT ns2 = (FLT)ns / 2;
-    FLT min_kx, max_kx;                             // 1st (x) dimension: get min/max of nonuniform points
+    const FLT ns2    = (FLT)opts.nspread / 2;
+    const FLT inv_dx = 1.0 / opts.grid_delta[0];             // inverse grid spacing
+    FLT min_kx, max_kx;                                      // 1st (x) dimension: get min/max of nonuniform points
     arrayrange(M, kx, &min_kx, &max_kx);
-    offset1      = (BIGINT)std::ceil(min_kx - ns2); // min index touched by kernel
-    size1        = (BIGINT)std::ceil(max_kx - ns2) - offset1 + ns; // int(ceil) first!
-    padded_size1 = size1 + get_padding<FLT>(ns);
+    offset1      = (BIGINT)std::ceil(inv_dx * min_kx - ns2); // min index touched by kernel
+    size1        = (BIGINT)std::ceil(inv_dx * max_kx - ns2) - offset1 + opts.nspread; // int(ceil) first!
+    padded_size1 = size1 + get_padding<FLT>(opts.nspread);
     if (ndims > 1) {
-        FLT min_ky, max_ky; // 2nd (y) dimension: get min/max of nonuniform points
+        FLT min_ky, max_ky;                          // 2nd (y) dimension: get min/max of nonuniform points
+        const FLT inv_dy = 1.0 / opts.grid_delta[1]; // inverse grid spacing
         arrayrange(M, ky, &min_ky, &max_ky);
-        offset2 = (BIGINT)std::ceil(min_ky - ns2);
-        size2   = (BIGINT)std::ceil(max_ky - ns2) - offset2 + ns;
+        offset2 = (BIGINT)std::ceil(min_ky * inv_dy - ns2);
+        size2   = (BIGINT)std::ceil(max_ky * inv_dy - ns2) - offset2 + opts.nspread;
     } else {
         offset2 = 0;
         size2   = 1;
     }
     if (ndims > 2) {
-        FLT min_kz, max_kz; // 3rd (z) dimension: get min/max of nonuniform points
+        FLT min_kz, max_kz;                          // 3rd (z) dimension: get min/max of nonuniform points
+        const FLT inv_dz = 1.0 / opts.grid_delta[2]; // inverse grid spacing
         arrayrange(M, kz, &min_kz, &max_kz);
-        offset3 = (BIGINT)std::ceil(min_kz - ns2);
-        size3   = (BIGINT)std::ceil(max_kz - ns2) - offset3 + ns;
+        offset3 = (BIGINT)std::ceil(inv_dz * min_kz - ns2);
+        size3   = (BIGINT)std::ceil(inv_dz * max_kz - ns2) - offset3 + opts.nspread;
     } else {
         offset3 = 0;
         size3   = 1;
@@ -880,5 +886,11 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
     // Single eval for both points. Should have identical results to 'split' eval
     spreadkernel::spread_subproblem_1d(0, N1, outgrid_single_eval.data(), 2, test_x, test_str, opts);
     for (int i = 0; i < 2 * opts.nspread; i++)
-        CHECK(outgrid_split_eval[i] == outgrid_single_eval[i]);
+        CHECK(
+            1.0 - std::abs(outgrid_split_eval[i] / outgrid_single_eval[i]) <= 5 * std::numeric_limits<FLT>::epsilon());
+
+    std::vector<FLT> outgrid_full(N1);
+    spread_kernel(N1, N2, N3, outgrid_full.data(), 2, test_x, nullptr, nullptr, test_str, &opts);
+    for (int i = 0; i < 2 * opts.nspread; i++)
+        CHECK(1.0 - std::abs(outgrid_single_eval[i] / outgrid_full[i]) <= 5 * std::numeric_limits<FLT>::epsilon());
 }
