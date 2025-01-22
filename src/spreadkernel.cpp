@@ -1,7 +1,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <limits>
+
 #include <polyfit.h>
 #include <spreadkernel.h>
 
@@ -14,18 +14,9 @@
 #include <cstdlib>
 #include <vector>
 
-inline constexpr double EPSILON = std::numeric_limits<double>::epsilon();
-#ifndef M_PI // Windows apparently doesn't have this const
-inline constexpr M_PI 3.14159265358979329
-#endif
-#define M_1_2PI 0.159154943091895336
-#define M_2PI   6.28318530717958648
-// to avoid mixed precision operators in eg i*pi, an either-prec PI...
-#define PI      FLT(M_PI)
-
-    using BIGINT = int64_t;
-using UBIGINT    = uint64_t;
-using FLT        = double;
+using BIGINT  = int64_t;
+using UBIGINT = uint64_t;
+using FLT     = double;
 
 namespace spreadkernel {
 
@@ -393,19 +384,21 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     alignas(alignment) std::array<FLT, n_parts * simd_size> ker{0};
     std::fill(du, du + size1, 0);
 
-    const FLT h              = opts.grid_delta[0];     // grid spacing
-    const FLT inv_h          = 1.0 / h;                // inverse grid spacing
-    const FLT ker_half_width = 0.5 * opts.nspread * h; // half width of the kernel
-    const FLT lb1            = off1 * h;               // left bound of the subgrid
+    const FLT h              = opts.grid_delta[0];          // grid spacing
+    const FLT half_h         = 0.5 * h;                     // half grid spacing
+    const FLT inv_h          = 1.0 / h;                     // inverse grid spacing
+    const FLT ker_half_width = 0.5 * opts.nspread * h;      // half width of the kernel
+    const FLT lb1            = off1 * h;                    // left bound of the subgrid
     for (uint64_t i = 0; i < M; i++) {
-        const auto dd_pt  = simd_type(dd[i]);
-        const auto dx     = kx[i] - lb1 - ker_half_width;           // x-location of first NU pt in fine grid
-        const BIGINT j    = inv_h * dx;                             // bin index
-        const auto dx_min = (j + 0.5) * h - kx[i] - ker_half_width; // distance to bin center
+        const auto dx     = kx[i] - lb1 - ker_half_width;   // x location for first kernel eval
+        const BIGINT j    = inv_h * (dx + half_h);          // bin index for first kernel eval
+        const auto dx_min = kx[i] - ker_half_width - j * h; // distance to the leftmost grid point in eval
+        assert(std::abs(dx_min) <= half_h);
 
-        opts.kerpoly(dx_min, ker.data());                           // evaluate the kernel
-        auto *SPREADKERNEL_RESTRICT trg = du + j;                   // restrict helps compiler to vectorize
+        opts.kerpoly(dx_min, ker.data());         // evaluate the kernel
+        auto *SPREADKERNEL_RESTRICT trg = du + j; // restrict helps compiler to vectorize
 
+        const auto dd_pt = simd_type(dd[i]);
         for (uint8_t part; part < n_parts; part += simd_size) {
             const auto ker0  = simd_type::load_aligned(ker.data() + part);
             const auto du_pt = simd_type::load_unaligned(trg + part);
@@ -850,4 +843,32 @@ TEST_CASE("SPREADKERNEL setup spreader") {
     spread_kernel_init(N1, N2, N3, &opts);
 
     CHECK(std::abs(opts.kerpoly.eval(1.2) - opts.ker(1.2, nullptr)) < opts.eps);
+}
+
+TEST_CASE("SPREADKERNEL 1d subproblem") {
+    spreadkernel_opts opts;
+    UBIGINT N1 = 100, N2 = 1, N3 = 1;
+    UBIGINT M = 100;
+    std::fill(opts.grid_delta, opts.grid_delta + 3, 1.0);
+    opts.kerevalmeth = SPREADKERNEL_EVAL_HORNER_DIRECT;
+    opts.nspread     = 5;
+    opts.eps         = 1e-7;
+    opts.ker         = [](double x, const void *) {
+        return exp(-(x * x));
+    };
+
+    spread_kernel_init(N1, N2, N3, &opts);
+    REQUIRE(opts.kerpoly.order);
+
+    constexpr auto simd_size = xsimd::simd_type<FLT>::size;
+    std::vector<FLT> data_uniform(N1);
+    data_uniform.reserve(N1);
+    std::vector<FLT> data_nonuniform(M + simd_size);
+    std::vector<FLT> kx(M);
+
+    FLT test_x   = 0.5 * opts.nspread;
+    FLT test_str = 1.0;
+    spreadkernel::spread_subproblem_1d(0, N1, data_uniform.data(), 1, &test_x, &test_str, opts);
+
+    CHECK(std::abs(data_uniform[2] - 1.0) < 1E-7);
 }

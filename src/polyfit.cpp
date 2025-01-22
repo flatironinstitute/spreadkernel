@@ -97,20 +97,22 @@ std::vector<Real> fit(kernel_func f, Real lb, Real ub, int order, const void *da
 }
 
 template <typename Real>
-Real eval_multi(const std::vector<Real> &coeffs, Real x, Real lb, Real ub, int order, Real h) {
+Real eval_multi(const std::vector<Real> &coeffs, Real x, Real h, int width, int order) {
     const Real half_h = 0.5 * h;
     const int n       = coeffs.size() / order;
-    const int i       = std::min(n - 1, int((x - lb) / h));
-    const Real x_i    = lb + half_h * (2 * i + 1);
+    const Real lb     = -half_h * (width - 1);
+    const int i       = std::min(n - 1, int((x + half_h - lb) / h));
+    const Real x_i    = lb + h * i;
+    assert(std::abs(x - x_i) <= half_h);
     return eval(coeffs.data() + i * order, order, x - x_i);
 }
 
 template <typename Real>
-void fit_multi(kernel_func f, Real lb, Real ub, int order, const void *data, Real *coeffs, int n) {
-    const Real half_h = (ub - lb) / (2 * n);
-
-    for (int i = 0; i < n; i++) {
-        const Real offset = lb + half_h * (2 * i + 1);
+void fit_multi(kernel_func f, Real h, int width, int order, const void *data, Real *coeffs) {
+    const Real half_h = 0.5 * h;
+    const Real lb     = -half_h * (width - 1);
+    for (int i = 0; i < width; i++) {
+        const Real offset = lb + h * i;
         fit(f, -half_h, half_h, order, data, coeffs + i * order, offset);
     }
 }
@@ -118,14 +120,14 @@ void fit_multi(kernel_func f, Real lb, Real ub, int order, const void *data, Rea
 template <typename Real>
 std::tuple<Real, Real> get_errors_for_auto(kernel_func f, const std::vector<Real> &sample_points,
                                            const std::vector<Real> &actual_vals, int order, const void *data,
-                                           const std::vector<Real> &coeffs, Real lb, Real ub, Real h,
-                                           const int n_samples, bool use_rel_error = false) {
+                                           const std::vector<Real> &coeffs, Real h, int width, const int n_samples,
+                                           bool use_rel_error = false) {
     Real max_error = 0.0;
     Real avg_error = 0.0;
 
     for (int i = 0; i < n_samples; i++) {
         Real x        = sample_points[i];
-        Real y        = eval_multi(coeffs, x, lb, ub, order, h);
+        Real y        = eval_multi(coeffs, x, h, width, order);
         Real actual_y = actual_vals[i];
         Real error    = use_rel_error ? std::abs(1.0 - y / actual_y) : std::abs(y - actual_y);
         avg_error += error;
@@ -139,40 +141,25 @@ std::tuple<Real, Real> get_errors_for_auto(kernel_func f, const std::vector<Real
 }
 
 template <typename Real>
-std::vector<Real> fit_multi_auto(kernel_func f, Real lb, Real ub, const void *data, int n_poly, double error_tol,
-                                 int min_order, int max_order, int n_samples) {
-    Real ub_safe       = ub - std::numeric_limits<Real>::epsilon();
-    uint64_t n_epsilon = 1;
-    while (ub_safe == ub) {
-        ub_safe -= n_epsilon * std::numeric_limits<Real>::epsilon();
-        n_epsilon *= 2;
-    }
-
-    std::vector<Real> x = linspaced(n_samples, lb, ub_safe);
+std::vector<Real> fit_multi_auto(kernel_func f, Real h, int width, const void *data, double error_tol, int min_order,
+                                 int max_order, int n_samples) {
+    const Real lb       = -0.5 * h * (width - 1);
+    const Real ub       = -lb;
+    std::vector<Real> x = linspaced(n_samples, lb - Real(0.5 * h), ub + Real(0.5 * h));
     std::vector<Real> y(n_samples);
     for (int i = 0; i < n_samples; i++)
         y[i] = f(x[i], data);
 
     for (int order = min_order; order < max_order; order++) {
-        std::vector<Real> coeffs(order * n_poly);
-        fit_multi(f, lb, ub, order, data, coeffs.data(), n_poly);
+        std::vector<Real> coeffs(order * width);
+        fit_multi(f, h, width, order, data, coeffs.data());
 
         auto [avg_rel_error, max_rel_error] =
-            get_errors_for_auto(f, x, y, order, data, coeffs, lb, ub, (ub - lb) / n_poly, n_samples);
+            get_errors_for_auto(f, x, y, order, data, coeffs, h, width, n_samples, true);
         if (avg_rel_error < error_tol) return coeffs;
     }
 
     return std::vector<Real>();
-}
-
-template <typename Real>
-void eval_grid(const std::vector<Real> &coeffs, Real x, Real lb, Real ub, int order, int n, Real *output) {
-    const Real h      = (ub - lb) / n;
-    const Real half_h = 0.5 * h;
-    const int i       = (x - lb) / h;
-    const Real dx     = x - (lb + half_h * (2 * i + 1));
-    for (int j = 0; j < n; j++)
-        output[j] = eval(coeffs.data() + j * order, order, dx);
 }
 
 template <typename T, std::size_t N, std::size_t M, std::size_t PaddedM>
@@ -279,9 +266,10 @@ double abs_error(const auto &y1, const auto &y2) {
 template <typename Real>
 Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real h, int n_spread, double tol, int min_order, int max_order,
                        int n_samples)
-    : lb(-0.5 * n_spread * h), ub(0.5 * n_spread * h), width(n_spread), h(h), half_h(0.5 * h), inv_h(1.0 / h) {
+    : lb(-0.5 * h * (n_spread - 1)), ub(0.5 * h * (n_spread - 1)), width(n_spread), h(h), half_h(0.5 * h),
+      inv_h(1.0 / h) {
 
-    coeffs_vec = fit_multi_auto(f, lb, ub, data, width, tol, min_order, max_order, n_samples);
+    coeffs_vec = fit_multi_auto(f, h, width, data, tol, min_order, max_order, n_samples);
     order      = coeffs_vec.size() / width;
     assert(order * width == coeffs_vec.size());
 
@@ -297,8 +285,8 @@ Polyfit<Real>::Polyfit(kernel_func f, const void *data, Real h, int n_spread, do
 
 template <typename Real>
 Real Polyfit<Real>::eval(Real x) const {
-    const int i    = std::min(width - 1, int(inv_h * (x - lb)));
-    const Real x_i = lb + half_h * (2 * i + 1);
+    const int i    = std::min(width - 1, int(inv_h * (x + half_h - lb)));
+    const Real x_i = lb + h * i;
     return spreadkernel::polyfit::eval(coeffs_vec.data() + i * order, order, x - x_i);
 }
 
@@ -328,24 +316,24 @@ bool dfilled = fill_evaluators<double>(double_evaluators);
 
 TEST_CASE("SPREADKERNEL Polyfit vector eval") {
     using namespace spreadkernel::polyfit;
-    const double lb  = -0.7;
-    const double ub  = 0.7;
     const double tol = 1E-8;
     const int width  = 7;
-    const double h   = (ub - lb) / width;
+    const double h   = 1.0;
+    const double lb  = -0.5 * h * (width - 1);
 
     kernel_func f = [](double x, const void *data) {
         return exp(-x * x);
     };
 
     Polyfit<double> polyfit(f, nullptr, h, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
+    REQUIRE(polyfit.order);
 
     alignas(64) std::array<double, width> res;
     alignas(64) std::array<double, width> res_vec;
     const double dx = h * 0.3;
     polyfit(dx, res_vec.data());
     for (int i = 0; i < width; ++i) {
-        const double x = lb + (i + 0.5) * h + dx;
+        const double x = lb + i * h + dx;
         res[i]         = polyfit(x);
     }
 
@@ -385,7 +373,7 @@ TEST_CASE("SPREADKERNEL fits/evals") {
     CHECK(abs_error(y, yraw) < tol);
 
     std::vector<double> coeffs_multi(multi_order * width);
-    fit_multi(f, lb, ub, multi_order, data, coeffs_multi.data(), width);
+    fit_multi(f, h, width, multi_order, data, coeffs_multi.data());
     alignas(64) std::array<std::array<double, SPREADKERNEL_MAX_WIDTH>, SPREADKERNEL_MAX_ORDER> coeffs_arr = {{0.0}};
     for (int i = 0; i < width; ++i)
         for (int j = 0; j < multi_order; ++j)
@@ -403,24 +391,17 @@ TEST_CASE("SPREADKERNEL fits/evals") {
     {
         std::vector<double> y_multi(n_samples);
         for (int i = 0; i < n_samples; i++)
-            y_multi[i] = eval_multi(coeffs_multi, x[i], lb, ub, multi_order, h);
+            y_multi[i] = eval_multi(coeffs_multi, x[i], h, width, multi_order);
         CHECK(abs_error(y_multi, yraw) < tol);
     }
 
-    std::vector<double> y_grid(width);
-    std::vector<double> x_grid_multi = linspaced(width, lb + 0.75 * h, ub - 0.25 * h);
-    std::vector<double> y_grid_multi(width);
-    eval_grid(coeffs_multi, lb + 1.75 * h, lb, ub, multi_order, width, y_grid.data());
-    for (int i = 0; i < width; i++)
-        y_grid_multi[i] = f(x_grid_multi[i], data);
-    CHECK(abs_error(y_grid, y_grid_multi) < tol);
-
-    auto coeffs_auto = fit_multi_auto(f, lb, ub, data, width, tol, min_order, max_order, n_samples);
+    auto coeffs_auto = fit_multi_auto(f, h, width, data, tol, min_order, max_order, n_samples);
     auto auto_order  = coeffs_auto.size() / width;
+    REQUIRE(auto_order);
 
     std::vector<double> y_auto(n_samples);
     for (int i = 0; i < n_samples; i++)
-        y_auto[i] = eval_multi(coeffs_auto, x[i], lb, ub, auto_order, h);
+        y_auto[i] = eval_multi(coeffs_auto, x[i], h, width, auto_order);
     CHECK(abs_error(y_auto, yraw) < tol);
 
     Polyfit polyfit(f, data, h, width, tol, min_order, max_order, n_samples);
