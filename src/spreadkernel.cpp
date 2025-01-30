@@ -855,6 +855,7 @@ TEST_CASE("SPREADKERNEL setup spreader") {
 
 TEST_CASE("SPREADKERNEL 1d subproblem") {
     spreadkernel_opts opts;
+    constexpr FLT machine_eps = std::numeric_limits<FLT>::epsilon();
     const UBIGINT N1 = 100, N2 = 1, N3 = 1;
     std::fill(opts.grid_delta, opts.grid_delta + 3, 1.3);
     opts.kerevalmeth = SPREADKERNEL_EVAL_HORNER_DIRECT;
@@ -886,11 +887,57 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
     // Single eval for both points. Should have identical results to 'split' eval
     spreadkernel::spread_subproblem_1d(0, N1, outgrid_single_eval.data(), 2, test_x, test_str, opts);
     for (int i = 0; i < 2 * opts.nspread; i++)
-        CHECK(
-            1.0 - std::abs(outgrid_split_eval[i] / outgrid_single_eval[i]) <= 5 * std::numeric_limits<FLT>::epsilon());
+        CHECK(1.0 - std::abs(outgrid_split_eval[i] / outgrid_single_eval[i]) <= 5 * machine_eps);
 
     std::vector<FLT> outgrid_full(N1);
+    outgrid_full.reserve(N1 + simd_size);
     spread_kernel(N1, N2, N3, outgrid_full.data(), 2, test_x, nullptr, nullptr, test_str, &opts);
     for (int i = 0; i < 2 * opts.nspread; i++)
-        CHECK(1.0 - std::abs(outgrid_single_eval[i] / outgrid_full[i]) <= 5 * std::numeric_limits<FLT>::epsilon());
+        CHECK(1.0 - std::abs(outgrid_single_eval[i] / outgrid_full[i]) <= 5 * machine_eps);
+
+    // Evenly spread points across the grid. First and last index should never eval
+    // The rest should build the gaussian up to a constant value
+    // The constant value is the sum of the kernel at nspread = 5
+    // 1.0 + 2 * exp(-h^2) + 2 * exp(-4 * h^2)
+    std::vector<FLT> x_full(N1 - opts.nspread - 1);
+    std::vector<FLT> str_full(N1 - opts.nspread - 1);
+    x_full.reserve(x_full.size() + simd_size);
+    str_full.reserve(str_full.size() + simd_size);
+    std::fill(outgrid_full.begin(), outgrid_full.end(), 0.0);
+    for (int i = 0; i < x_full.size(); i++)
+        x_full[i] = (1 + i + 0.5 * opts.nspread) * opts.grid_delta[0];
+
+    std::fill(str_full.begin(), str_full.end(), 1.0);
+
+    spreadkernel::spread_subproblem_1d(0, N1, outgrid_full.data(), x_full.size(), x_full.data(), str_full.data(),
+                                       opts);
+
+    // evals at 2 * h once
+    const auto first_val = opts.ker(2 * opts.grid_delta[0], nullptr);
+    // evals at 2 * h once, and h once
+    const auto second_val = opts.ker(opts.grid_delta[0], nullptr) + first_val;
+    // evals at 0 once, 2 * h once, and h once
+    const auto third_val = opts.ker(0.0, nullptr) + second_val;
+    // evals at 0 once, h twice, and 2 * h once
+    const auto fourth_val = third_val + opts.ker(opts.grid_delta[0], nullptr);
+    // evals at 0  once, h twice, and 2 * h twice
+    const auto fifth_val    = third_val + second_val;
+    constexpr auto full_tol = 50 * machine_eps; // heuristic tolerance. Way less than requested, so no problem
+
+    CHECK(outgrid_full[0] == 0.0);
+    CHECK(std::abs(outgrid_full[1] - first_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[2] - second_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[3] - third_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[4] - fourth_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[5] - fifth_val) <= full_tol);
+
+    const auto last_i = outgrid_full.size() - 1;
+    for (int i = 6; i < last_i - opts.nspread; ++i)
+        CHECK(std::abs(outgrid_full[i] - fifth_val) <= full_tol);
+
+    CHECK(std::abs(outgrid_full[last_i - 1] - first_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[last_i - 2] - second_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[last_i - 3] - third_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[last_i - 4] - fourth_val) <= full_tol);
+    CHECK(std::abs(outgrid_full[last_i - 5] - fifth_val) <= full_tol);
 }
