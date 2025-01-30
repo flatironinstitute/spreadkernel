@@ -520,20 +520,18 @@ void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT
         const auto oz = N1 * N2 * o3[dz];                                                 // offset due to z (0 in <3D)
         for (int dy = 0; dy < size2; dy++) {
             const auto oy                   = N1 * o2[dy] + oz;                           // off due to y & z (0 in 1D)
-            auto *SPREADKERNEL_RESTRICT out = data_uniform + 2 * oy;
-            const auto in                   = du0 + 2 * padded_size1 * (dy + size2 * dz); // ptr to subgrid array
-            auto o                          = 2 * (offset1 + N1);                         // 1d offset for output
-            for (auto j = 0; j < 2 * nlo; j++) { // j is really dx/2 (since re,im parts)
+            auto *SPREADKERNEL_RESTRICT out = data_uniform + oy;
+            const auto in                   = du0 + padded_size1 * (dy + size2 * dz); // ptr to subgrid array
+            auto o                          = (offset1 + N1);                         // 1d offset for output
+            for (auto j = 0; j < nlo; j++)
                 accumulate(out[j + o], in[j]);
-            }
-            o = 2 * offset1;
-            for (auto j = 2 * nlo; j < 2 * (size1 - nhi); j++) {
+
+            o = offset1;
+            for (auto j = nlo; j < (size1 - nhi); j++)
                 accumulate(out[j + o], in[j]);
-            }
-            o = 2 * (offset1 - N1);
-            for (auto j = 2 * (size1 - nhi); j < 2 * size1; j++) {
+            o = (offset1 - N1);
+            for (auto j = (size1 - nhi); j < size1; j++)
                 accumulate(out[j + o], in[j]);
-            }
         }
     }
 }
