@@ -71,7 +71,6 @@ void fit(kernel_func f, Real lb, Real ub, int order, const void *data, Real *coe
     std::vector<Real> y(order);
     for (int i = 0; i < order; i++)
         y[i] = f(x[i] + offset, data);
-
     std::vector<Real> Vinv = vandermonde_inverse(order, x.data());
     for (int i = 0; i < order; i++) {
         coeffs[order - i - 1] = 0;
@@ -92,7 +91,7 @@ inline Real eval(const Real *coeffs, int order, Real x) {
 template <typename Real>
 std::vector<Real> fit(kernel_func f, Real lb, Real ub, int order, const void *data) {
     std::vector<Real> coeffs(order);
-    fit(f, lb, ub, order, data, coeffs.data(), 0.0);
+    fit(f, lb, ub, order, data, coeffs.data(), Real(0.0));
     return coeffs;
 }
 
@@ -103,7 +102,7 @@ Real eval_multi(const std::vector<Real> &coeffs, Real x, Real h, int width, int 
     const Real lb     = -half_h * (width - 1);
     const int i       = std::min(n - 1, int((x + half_h - lb) / h));
     const Real x_i    = lb + h * i;
-    assert(std::abs(x - x_i) <= half_h);
+    assert(std::abs(x - x_i) - half_h <= std::numeric_limits<Real>::epsilon());
     return eval(coeffs.data() + i * order, order, x - x_i);
 }
 
@@ -314,82 +313,83 @@ bool dfilled = fill_evaluators<double>(double_evaluators);
 
 } // namespace spreadkernel::polyfit
 
-TEST_CASE("SPREADKERNEL Polyfit vector eval") {
+TEST_CASE_TEMPLATE("SPREADKERNEL Polyfit vector eval", Real, float, double) {
     using namespace spreadkernel::polyfit;
-    const double tol = 1E-8;
-    const int width  = 7;
-    const double h   = 1.0;
-    const double lb  = -0.5 * h * (width - 1);
+    const Real tol  = std::is_same_v<Real, float> ? 1E-4 : 1E-8;
+    const int width = 7;
+    const Real h    = 1.0;
+    const Real lb   = -0.5 * h * (width - 1);
 
     kernel_func f = [](double x, const void *data) {
         return exp(-x * x);
     };
 
-    Polyfit<double> polyfit(f, nullptr, h, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
+    Polyfit<Real> polyfit(f, nullptr, h, width, tol, SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
     REQUIRE(polyfit.order);
 
-    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res;
-    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_vec;
-    const double dx = h * 0.3;
+    alignas(64) std::array<Real, SPREADKERNEL_MAX_ORDER> res;
+    alignas(64) std::array<Real, SPREADKERNEL_MAX_ORDER> res_vec;
+    const Real dx = h * 0.3;
     polyfit(dx, res_vec.data());
     for (int i = 0; i < width; ++i) {
-        const double x = lb + i * h + dx;
-        res[i]         = polyfit(x);
+        const Real x = lb + i * h + dx;
+        res[i]       = polyfit(x);
     }
 
     for (int i = 0; i < width; ++i)
-        CHECK(std::abs(res[i] - res_vec[i]) < std::numeric_limits<double>::epsilon());
+        CHECK(std::abs(res[i] - res_vec[i]) < std::numeric_limits<Real>::epsilon());
 }
 
-TEST_CASE("SPREADKERNEL fits/evals") {
+TEST_CASE_TEMPLATE("SPREADKERNEL fits/evals", Real, float, double) {
     using namespace spreadkernel::polyfit;
-    const double lb       = -0.7;
-    const double ub       = 0.7;
+    const Real lb         = -0.7;
+    const Real ub         = 0.7;
     const int order       = SPREADKERNEL_MAX_ORDER;
     const int n_samples   = 100;
     const int max_order   = SPREADKERNEL_MAX_ORDER;
     const int min_order   = SPREADKERNEL_MIN_ORDER;
     const int width       = 7;
-    const double h        = (ub - lb) / width;
+    const Real h          = (ub - lb) / width;
     const int multi_order = 7;
-    const double tol      = 1E-8;
+    const Real tol        = std::is_same_v<Real, float> ? 1E-3 : 1E-8;
     const void *data      = nullptr;
 
     kernel_func f = [](double x, const void *data) {
         return sin(pow(x, 2) * cos(x));
     };
 
-    std::vector<double> coeffs = fit(f, lb, ub, order, data);
-    std::vector<double> x      = linspaced(n_samples, lb, ub - std::numeric_limits<double>::epsilon());
-    std::vector<double> y(n_samples);
+    std::vector<Real> coeffs = fit(f, lb, ub, order, data);
+    std::vector<Real> x      = linspaced(n_samples, lb, ub - std::numeric_limits<Real>::epsilon());
+    std::vector<Real> y(n_samples);
 
     for (int i = 0; i < n_samples; i++)
         y[i] = eval(coeffs.data(), order, x[i]);
 
-    std::vector<double> yraw(n_samples);
+    std::vector<Real> yraw(n_samples);
     for (int i = 0; i < n_samples; i++)
         yraw[i] = f(x[i], data);
 
     CHECK(abs_error(y, yraw) < tol);
 
-    std::vector<double> coeffs_multi(multi_order * width);
+    std::vector<Real> coeffs_multi(multi_order * width);
     fit_multi(f, h, width, multi_order, data, coeffs_multi.data());
-    alignas(64) std::array<std::array<double, SPREADKERNEL_MAX_WIDTH>, SPREADKERNEL_MAX_ORDER> coeffs_arr = {{0.0}};
+    alignas(64) std::array<std::array<Real, SPREADKERNEL_MAX_WIDTH>, SPREADKERNEL_MAX_ORDER> coeffs_arr = {{0.0}};
     for (int i = 0; i < width; ++i)
         for (int j = 0; j < multi_order; ++j)
             coeffs_arr[j][i] = coeffs_multi[i * multi_order + j];
 
-    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_vec{0.0};
-    alignas(64) std::array<double, SPREADKERNEL_MAX_ORDER> res_scalar{0.0};
-    const double dx = 0.1;
-    eval_kernel_vec_horner<width, multi_order, PaddedSIMD<double, width>>(res_vec.data(), coeffs_arr, dx);
+    alignas(64) std::array<Real, SPREADKERNEL_MAX_ORDER> res_vec{0.0};
+    alignas(64) std::array<Real, SPREADKERNEL_MAX_ORDER> res_scalar{0.0};
+    const Real dx = 0.1;
+    eval_kernel_vec_horner<width, multi_order, PaddedSIMD<Real, width>>(res_vec.data(), coeffs_arr, dx);
     for (int i = 0; i < width; ++i)
-        res_scalar[i] = eval(coeffs_multi.data() + i * multi_order, multi_order, 0.1);
+        res_scalar[i] = eval(coeffs_multi.data() + i * multi_order, multi_order, Real(0.1));
 
-    CHECK(res_vec == res_scalar);
+    for (int i = 0; i < width; ++i)
+        CHECK(std::abs(1.0 - res_vec[i] / res_scalar[i]) <= std::numeric_limits<Real>::epsilon());
 
     {
-        std::vector<double> y_multi(n_samples);
+        std::vector<Real> y_multi(n_samples);
         for (int i = 0; i < n_samples; i++)
             y_multi[i] = eval_multi(coeffs_multi, x[i], h, width, multi_order);
         CHECK(abs_error(y_multi, yraw) < tol);
@@ -399,13 +399,13 @@ TEST_CASE("SPREADKERNEL fits/evals") {
     auto auto_order  = coeffs_auto.size() / width;
     REQUIRE(auto_order);
 
-    std::vector<double> y_auto(n_samples);
+    std::vector<Real> y_auto(n_samples);
     for (int i = 0; i < n_samples; i++)
         y_auto[i] = eval_multi(coeffs_auto, x[i], h, width, auto_order);
     CHECK(abs_error(y_auto, yraw) < tol);
 
     Polyfit polyfit(f, data, h, width, tol, min_order, max_order, n_samples);
-    std::vector<double> y_polyfit(n_samples);
+    std::vector<Real> y_polyfit(n_samples);
     for (int i = 0; i < n_samples; i++)
         y_polyfit[i] = polyfit(x[i]);
 
