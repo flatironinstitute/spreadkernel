@@ -17,7 +17,6 @@
 
 using BIGINT  = int64_t;
 using UBIGINT = uint64_t;
-using FLT     = double;
 
 namespace spreadkernel {
 
@@ -98,37 +97,47 @@ void print_subgrid_info(int ndims, BIGINT offset1, BIGINT offset2, BIGINT offset
                         UBIGINT size2, UBIGINT size3, UBIGINT M0);
 } // namespace
 
-static SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x, const spreadkernel_opts &opts) noexcept;
-static SPREADKERNEL_ALWAYS_INLINE void evaluate_kernel_vector(FLT *ker, FLT *args,
+template <typename Real>
+static SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(Real *args, Real x, const spreadkernel_opts &opts) noexcept;
+template <typename Real>
+static SPREADKERNEL_ALWAYS_INLINE void evaluate_kernel_vector(Real *ker, Real *args,
                                                               const spreadkernel_opts &opts) noexcept;
 
-static void spread_subproblem_1d(BIGINT off1, UBIGINT size1, FLT *du0, UBIGINT M0, FLT *kx0, FLT *dd0,
+template <typename Real>
+static void spread_subproblem_1d(BIGINT off1, UBIGINT size1, Real *du0, UBIGINT M0, Real *kx0, Real *dd0,
                                  const spreadkernel_opts &opts) noexcept;
-template <bool thread_safe>
+template <bool thread_safe, typename Real>
 static void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
                                 UBIGINT size2, UBIGINT size3, UBIGINT N1, UBIGINT N2, UBIGINT N3,
-                                FLT *SPREADKERNEL_RESTRICT data_uniform, const FLT *du0);
-static void bin_sort_singlethread(BIGINT *ret, UBIGINT M, const FLT *kx, const FLT *ky, const FLT *kz, UBIGINT N1,
+                                Real *SPREADKERNEL_RESTRICT data_uniform, const Real *du0);
+template <typename Real>
+static void bin_sort_singlethread(BIGINT *ret, UBIGINT M, const Real *kx, const Real *ky, const Real *kz, UBIGINT N1,
                                   UBIGINT N2, UBIGINT N3, double bin_size_x, double bin_size_y, double bin_size_z,
                                   int debug);
-void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBIGINT N1, UBIGINT N2, UBIGINT N3,
+template <typename Real>
+void bin_sort_multithread(BIGINT *ret, UBIGINT M, Real *kx, Real *ky, Real *kz, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                           double bin_size_x, double bin_size_y, double bin_size_z, int debug, int nthr);
+template <typename Real>
 static void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padded_size1, BIGINT &size1,
-                        BIGINT &size2, BIGINT &size3, UBIGINT M0, FLT *kx0, FLT *ky0, FLT *kz0, int ndims,
+                        BIGINT &size2, BIGINT &size3, UBIGINT M0, Real *kx0, Real *ky0, Real *kz0, int ndims,
                         const spreadkernel_opts &opts);
-bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
+template <typename Real>
+bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, Real *kx, Real *ky, Real *kz,
                 const spreadkernel_opts &opts);
+template <typename Real>
 int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3,
-                  FLT *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx,
-                  FLT *SPREADKERNEL_RESTRICT ky, FLT *SPREADKERNEL_RESTRICT kz, const FLT *data_nonuniform,
+                  Real *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, Real *SPREADKERNEL_RESTRICT kx,
+                  Real *SPREADKERNEL_RESTRICT ky, Real *SPREADKERNEL_RESTRICT kz, const Real *data_nonuniform,
                   const spreadkernel_opts &opts, bool did_sort);
 
+// FIXME: implement wrapping
 auto fold_rescale(const auto x, const UBIGINT N) noexcept { return x; }
 
 // With a a length-n array, writes out min(a) to lo and max(a) to hi,
 // so that all a values lie in [lo,hi].
 // If n==0, lo and hi are not finite.
-void arrayrange(BIGINT n, FLT *a, FLT *lo, FLT *hi) {
+template <typename Real>
+void arrayrange(BIGINT n, Real *a, Real *lo, Real *hi) {
     *lo = INFINITY;
     *hi = -INFINITY;
     for (BIGINT m = 0; m < n; ++m) {
@@ -166,7 +175,8 @@ static constexpr uint8_t ndims_from_Ns(const UBIGINT N1, const UBIGINT N2, const
 
    Barnett 2017; split out by Melody Shih, Jun 2018. Barnett nthr logic 2024.
 */
-bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
+template <typename Real>
+bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGINT M, Real *kx, Real *ky, Real *kz,
                 const spreadkernel_opts &opts) {
     CNTime timer{};
     uint8_t ndims = ndims_from_Ns(N1, N2, N3);
@@ -214,9 +224,10 @@ bool index_sort(BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3, UBIGIN
 
 // --------------------------------------------------------------------------
 // Spread NU pts in sorted order to a uniform grid. See spreadinterp() for doc.
+template <typename Real>
 int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3,
-                  FLT *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, FLT *SPREADKERNEL_RESTRICT kx,
-                  FLT *SPREADKERNEL_RESTRICT ky, FLT *SPREADKERNEL_RESTRICT kz, const FLT *data_nonuniform,
+                  Real *SPREADKERNEL_RESTRICT data_uniform, UBIGINT M, Real *SPREADKERNEL_RESTRICT kx,
+                  Real *SPREADKERNEL_RESTRICT ky, Real *SPREADKERNEL_RESTRICT kz, const Real *data_nonuniform,
                   const spreadkernel_opts &opts, bool did_sort) {
     CNTime timer{};
     const auto ndims = ndims_from_Ns(N1, N2, N3);
@@ -272,7 +283,7 @@ int spread_sorted(const BIGINT *sort_indices, UBIGINT N1, UBIGINT N2, UBIGINT N3
 #pragma omp parallel num_threads(nthr)
         {
             // local copies of NU pts and data for each subproblem
-            std::vector<FLT> kx0{}, ky0{}, kz0{}, dd0{}, du0{};
+            std::vector<Real> kx0{}, ky0{}, kz0{}, dd0{}, du0{};
 #pragma omp for schedule(dynamic, 1)                       // each is big
             for (int isub = 0; isub < nb; isub++) {        // Main loop through the subproblems
                 const auto M0 = brk[isub + 1] - brk[isub]; // # NU pts in this subproblem
@@ -346,19 +357,20 @@ void setup_spreader(spreadkernel_opts &opts, int dim) {
                                         SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH, 100);
 }
 
-SPREADKERNEL_ALWAYS_INLINE FLT evaluate_kernel(FLT x, const spreadkernel_opts &opts) {
+template <typename Real>
+SPREADKERNEL_ALWAYS_INLINE Real evaluate_kernel(Real x, const spreadkernel_opts &opts) {
     if (abs(x) >= opts.kerpoly.ub)
         return 0.0;
     else
         return opts.ker(x, opts.ker_data);
 }
 
-template <uint8_t ns>
-SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
+template <uint8_t ns, typename Real>
+SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(Real *args, Real x) noexcept {
     // Fills vector args[] with kernel arguments x, x+1, ..., x+ns-1.
     // needed for the vectorized kernel eval of Ludvig af K.
     for (int i = 0; i < ns; i++)
-        args[i] = x + (FLT)i;
+        args[i] = x + (Real)i;
 }
 
 /* 1D spreader from nonuniform to uniform subproblem grid, without wrapping.
@@ -374,11 +386,11 @@ SPREADKERNEL_ALWAYS_INLINE void set_kernel_args(FLT *args, FLT x) noexcept {
    Outputs:
    du (length size1 real) - preallocated uniform subgrid array
 */
-template <uint8_t ns, bool kerevalmeth>
+template <uint8_t ns, bool kerevalmeth, typename Real>
 SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
-    const BIGINT off1, const UBIGINT size1, FLT *SPREADKERNEL_RESTRICT du, const UBIGINT M, const FLT *const kx,
-    const FLT *const dd, const spreadkernel_opts &opts) noexcept {
-    using simd_type                 = PaddedSIMD<FLT, ns>;
+    const BIGINT off1, const UBIGINT size1, Real *SPREADKERNEL_RESTRICT du, const UBIGINT M, const Real *const kx,
+    const Real *const dd, const spreadkernel_opts &opts) noexcept {
+    using simd_type                 = PaddedSIMD<Real, ns>;
     using arch_t                    = typename simd_type::arch_type;
     static constexpr auto alignment = arch_t::alignment();
     static constexpr auto simd_size = simd_type::size;
@@ -386,14 +398,14 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
     static constexpr auto tot_size  = n_parts * simd_size;
     static_assert(n_parts > 0, "n_parts must be greater than 0");
 
-    alignas(alignment) std::array<FLT, n_parts * simd_size> ker{0};
+    alignas(alignment) std::array<Real, n_parts * simd_size> ker{0};
     std::fill(du, du + size1, 0);
 
-    const FLT h              = opts.grid_delta[0];        // grid spacing
-    const FLT half_h         = 0.5 * h;                   // half grid spacing
-    const FLT inv_h          = 1.0 / h;                   // inverse grid spacing
-    const FLT ker_half_width = 0.5 * opts.nspread * h;    // half width of the kernel
-    const FLT lb1            = off1 * h;                  // left bound of the subgrid
+    const Real h              = opts.grid_delta[0];       // grid spacing
+    const Real half_h         = 0.5 * h;                  // half grid spacing
+    const Real inv_h          = 1.0 / h;                  // inverse grid spacing
+    const Real ker_half_width = 0.5 * opts.nspread * h;   // half width of the kernel
+    const Real lb1            = off1 * h;                 // left bound of the subgrid
     for (uint64_t i = 0; i < M; i++) {
         const auto dx     = kx[i] - lb1 - ker_half_width; // x location for first kernel eval
         const BIGINT j    = inv_h * (dx + half_h);        // bin index for first kernel eval
@@ -441,9 +453,9 @@ SPREADKERNEL_NEVER_INLINE void spread_subproblem_1d_kernel(
         This is a known issue with template metaprogramming.
         If you increased SPREADKERNEL_MAX_WIDTH and the code does not compile, try reducing it.
 */
-template <uint8_t NS>
-static void spread_subproblem_1d_dispatch(const BIGINT off1, const UBIGINT size1, FLT *SPREADKERNEL_RESTRICT du,
-                                          const UBIGINT M, const FLT *kx, const FLT *dd,
+template <uint8_t NS, typename Real>
+static void spread_subproblem_1d_dispatch(const BIGINT off1, const UBIGINT size1, Real *SPREADKERNEL_RESTRICT du,
+                                          const UBIGINT M, const Real *kx, const Real *dd,
                                           const spreadkernel_opts &opts) noexcept {
     static_assert(SPREADKERNEL_MIN_WIDTH <= NS && NS <= SPREADKERNEL_MAX_WIDTH,
                   "NS must be in the range (SPREADKERNEL_MIN_WIDTH, SPREADKERNEL_MAX_WIDTH)");
@@ -473,15 +485,16 @@ static void spread_subproblem_1d_dispatch(const BIGINT off1, const UBIGINT size1
    du (size size1*size2) is complex uniform output array
    For algoritmic details see spread_subproblem_1d_kernel.
 */
-void spread_subproblem_1d(BIGINT off1, UBIGINT size1, FLT *du, UBIGINT M, FLT *kx, FLT *dd,
+template <typename Real>
+void spread_subproblem_1d(BIGINT off1, UBIGINT size1, Real *du, UBIGINT M, Real *kx, Real *dd,
                           const spreadkernel_opts &opts) noexcept {
     spread_subproblem_1d_dispatch<SPREADKERNEL_MAX_WIDTH>(off1, size1, du, M, kx, dd, opts);
 }
 
-template <bool thread_safe>
+template <bool thread_safe, typename Real>
 void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT padded_size1, UBIGINT size1,
                          UBIGINT size2, UBIGINT size3, UBIGINT N1, UBIGINT N2, UBIGINT N3,
-                         FLT *SPREADKERNEL_RESTRICT data_uniform, const FLT *const du0)
+                         Real *SPREADKERNEL_RESTRICT data_uniform, const Real *const du0)
 /* Add a large subgrid (du0) to output grid (data_uniform),
    with periodic wrapping to N1,N2,N3 box.
    offset1,2,3 give the offset of the subgrid from the lowest corner of output.
@@ -493,7 +506,7 @@ void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT
 */
 {
     std::vector<BIGINT> o2(size2), o3(size3);
-    static auto accumulate = [](FLT &a, FLT b) {
+    static auto accumulate = [](Real &a, Real b) {
         if constexpr (thread_safe) { // NOLINT(*-branch-clone)
 #pragma omp atomic
             a += b;
@@ -516,10 +529,10 @@ void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT
     UBIGINT nlo = (offset1 < 0) ? -offset1 : 0;                      // # wrapping below in x
     UBIGINT nhi = (offset1 + size1 > N1) ? offset1 + size1 - N1 : 0; // " above in x
     // this triple loop works in all dims
-    for (int dz = 0; dz < size3; dz++) {                                                  // use ptr lists in each axis
-        const auto oz = N1 * N2 * o3[dz];                                                 // offset due to z (0 in <3D)
+    for (int dz = 0; dz < size3; dz++) {                                              // use ptr lists in each axis
+        const auto oz = N1 * N2 * o3[dz];                                             // offset due to z (0 in <3D)
         for (int dy = 0; dy < size2; dy++) {
-            const auto oy                   = N1 * o2[dy] + oz;                           // off due to y & z (0 in 1D)
+            const auto oy                   = N1 * o2[dy] + oz;                       // off due to y & z (0 in 1D)
             auto *SPREADKERNEL_RESTRICT out = data_uniform + oy;
             const auto in                   = du0 + padded_size1 * (dy + size2 * dz); // ptr to subgrid array
             auto o                          = (offset1 + N1);                         // 1d offset for output
@@ -536,9 +549,10 @@ void add_wrapped_subgrid(BIGINT offset1, BIGINT offset2, BIGINT offset3, UBIGINT
     }
 }
 
-void bin_sort_singlethread(BIGINT *ret, const UBIGINT M, const FLT *kx, const FLT *ky, const FLT *kz, const UBIGINT N1,
-                           const UBIGINT N2, const UBIGINT N3, const double bin_size_x, const double bin_size_y,
-                           const double bin_size_z, const int debug)
+template <typename Real>
+void bin_sort_singlethread(BIGINT *ret, const UBIGINT M, const Real *kx, const Real *ky, const Real *kz,
+                           const UBIGINT N1, const UBIGINT N2, const UBIGINT N3, const double bin_size_x,
+                           const double bin_size_y, const double bin_size_z, const int debug)
 /* Returns permutation of all nonuniform points with good RAM access,
  * ie less cache misses for spreading, in 1D, 2D, or 3D. Single-threaded version
  *
@@ -571,13 +585,13 @@ void bin_sort_singlethread(BIGINT *ret, const UBIGINT M, const FLT *kx, const FL
     // here the +1 is needed to allow round-off error causing i1=N1/bin_size_x,
     // for kx near +pi, ie foldrescale gives N1 (exact arith would be 0 to N1-1).
     // Note that round-off near kx=-pi stably rounds negative to i1=0.
-    const auto nbins1         = BIGINT(FLT(N1) / bin_size_x + 1);
-    const auto nbins2         = isky ? BIGINT(FLT(N2) / bin_size_y + 1) : 1;
-    const auto nbins3         = iskz ? BIGINT(FLT(N3) / bin_size_z + 1) : 1;
+    const auto nbins1         = BIGINT(Real(N1) / bin_size_x + 1);
+    const auto nbins2         = isky ? BIGINT(Real(N2) / bin_size_y + 1) : 1;
+    const auto nbins3         = iskz ? BIGINT(Real(N3) / bin_size_z + 1) : 1;
     const auto nbins          = nbins1 * nbins2 * nbins3;
-    const auto inv_bin_size_x = FLT(1.0 / bin_size_x);
-    const auto inv_bin_size_y = FLT(1.0 / bin_size_y);
-    const auto inv_bin_size_z = FLT(1.0 / bin_size_z);
+    const auto inv_bin_size_x = Real(1.0 / bin_size_x);
+    const auto inv_bin_size_y = Real(1.0 / bin_size_y);
+    const auto inv_bin_size_z = Real(1.0 / bin_size_z);
     // count how many pts in each bin
     std::vector<BIGINT> counts(nbins, 0);
 
@@ -609,7 +623,8 @@ void bin_sort_singlethread(BIGINT *ret, const UBIGINT M, const FLT *kx, const FL
     }
 }
 
-void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBIGINT N1, UBIGINT N2, UBIGINT N3,
+template <typename Real>
+void bin_sort_multithread(BIGINT *ret, UBIGINT M, Real *kx, Real *ky, Real *kz, UBIGINT N1, UBIGINT N2, UBIGINT N3,
                           double bin_size_x, double bin_size_y, double bin_size_z, int debug, int nthr)
 /* Mostly-OpenMP'ed version of bin_sort.
    For documentation see: bin_sort_singlethread.
@@ -678,8 +693,9 @@ void bin_sort_multithread(BIGINT *ret, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, UBI
     }
 }
 
+template <typename Real>
 void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padded_size1, BIGINT &size1, BIGINT &size2,
-                 BIGINT &size3, UBIGINT M, FLT *kx, FLT *ky, FLT *kz, int ndims, const spreadkernel_opts &opts)
+                 BIGINT &size3, UBIGINT M, Real *kx, Real *ky, Real *kz, int ndims, const spreadkernel_opts &opts)
 /* Writes out the integer offsets and sizes of a "subgrid" (cuboid subset of
    Z^ndims) large enough to enclose all of the nonuniform points with
    (non-periodic) padding of half the kernel width ns to each side in
@@ -723,16 +739,16 @@ void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padd
    tests.
 */
 {
-    const FLT ns2    = (FLT)opts.nspread / 2;
-    const FLT inv_dx = 1.0 / opts.grid_delta[0];             // inverse grid spacing
-    FLT min_kx, max_kx;                                      // 1st (x) dimension: get min/max of nonuniform points
+    const Real ns2    = (Real)opts.nspread / 2;
+    const Real inv_dx = 1.0 / opts.grid_delta[0];            // inverse grid spacing
+    Real min_kx, max_kx;                                     // 1st (x) dimension: get min/max of nonuniform points
     arrayrange(M, kx, &min_kx, &max_kx);
     offset1      = (BIGINT)std::ceil(inv_dx * min_kx - ns2); // min index touched by kernel
     size1        = (BIGINT)std::ceil(inv_dx * max_kx - ns2) - offset1 + opts.nspread; // int(ceil) first!
-    padded_size1 = size1 + get_padding<FLT>(opts.nspread);
+    padded_size1 = size1 + get_padding<Real>(opts.nspread);
     if (ndims > 1) {
-        FLT min_ky, max_ky;                          // 2nd (y) dimension: get min/max of nonuniform points
-        const FLT inv_dy = 1.0 / opts.grid_delta[1]; // inverse grid spacing
+        Real min_ky, max_ky;                          // 2nd (y) dimension: get min/max of nonuniform points
+        const Real inv_dy = 1.0 / opts.grid_delta[1]; // inverse grid spacing
         arrayrange(M, ky, &min_ky, &max_ky);
         offset2 = (BIGINT)std::ceil(min_ky * inv_dy - ns2);
         size2   = (BIGINT)std::ceil(max_ky * inv_dy - ns2) - offset2 + opts.nspread;
@@ -741,8 +757,8 @@ void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padd
         size2   = 1;
     }
     if (ndims > 2) {
-        FLT min_kz, max_kz;                          // 3rd (z) dimension: get min/max of nonuniform points
-        const FLT inv_dz = 1.0 / opts.grid_delta[2]; // inverse grid spacing
+        Real min_kz, max_kz;                          // 3rd (z) dimension: get min/max of nonuniform points
+        const Real inv_dz = 1.0 / opts.grid_delta[2]; // inverse grid spacing
         arrayrange(M, kz, &min_kz, &max_kz);
         offset3 = (BIGINT)std::ceil(inv_dz * min_kz - ns2);
         size3   = (BIGINT)std::ceil(inv_dz * max_kz - ns2) - offset3 + opts.nspread;
@@ -753,7 +769,8 @@ void get_subgrid(BIGINT &offset1, BIGINT &offset2, BIGINT &offset3, BIGINT &padd
 }
 
 template <uint8_t ns, uint8_t kerevalmeth, class T, class simd_type, typename... V>
-auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, const V... elems) noexcept {
+auto ker_eval(typename simd_type::value_type *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts,
+              const V... elems) noexcept {
     /* Utility function that allows to move the kernel evaluation outside the spreader for
        clarity
        Inputs are:
@@ -785,6 +802,20 @@ auto ker_eval(FLT *SPREADKERNEL_RESTRICT ker, const spreadkernel_opts &opts, con
         }
     }
     return ker;
+}
+
+template <typename Real>
+int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, Real *data_uniform, UBIGINT M, Real *kx, Real *ky, Real *kz,
+                  Real *data_nonuniform, spreadkernel_opts *opts) {
+    std::unique_ptr<BIGINT[]> sort_indices(new BIGINT[M]);
+    if (!sort_indices) {
+        fprintf(stderr, "%s failed to allocate sort_indices!\n", __func__);
+        return SPREADKERNEL_ERR_SPREAD_ALLOC;
+    }
+    auto did_sort = spreadkernel::index_sort(sort_indices.get(), N1, N2, N3, M, kx, ky, kz, *opts);
+    spread_sorted(sort_indices.get(), N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, *opts, did_sort);
+
+    return SPREADKERNEL_SUCCESS;
 }
 
 namespace {
@@ -821,19 +852,15 @@ int spread_kernel_init(UBIGINT N1, UBIGINT N2, UBIGINT N3, spreadkernel_opts *op
     return SPREADKERNEL_SUCCESS;
 }
 
-int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, FLT *data_uniform, UBIGINT M, FLT *kx, FLT *ky, FLT *kz,
-                  FLT *data_nonuniform, spreadkernel_opts *opts) {
-    std::unique_ptr<BIGINT[]> sort_indices(new BIGINT[M]);
-    if (!sort_indices) {
-        fprintf(stderr, "%s failed to allocate sort_indices!\n", __func__);
-        return SPREADKERNEL_ERR_SPREAD_ALLOC;
-    }
-    auto did_sort = spreadkernel::index_sort(sort_indices.get(), N1, N2, N3, M, kx, ky, kz, *opts);
-    spreadkernel::spread_sorted(sort_indices.get(), N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, *opts,
-                                did_sort);
-
-    return SPREADKERNEL_SUCCESS;
+int spread_kernel(UBIGINT N1, UBIGINT N2, UBIGINT N3, double *data_uniform, UBIGINT M, double *kx, double *ky,
+                  double *kz, double *data_nonuniform, spreadkernel_opts *opts) {
+    return spreadkernel::spread_kernel(N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, opts);
 }
+
+// int spread_kernelf(UBIGINT N1, UBIGINT N2, UBIGINT N3, float *data_uniform, UBIGINT M, float *kx, float *ky,
+//                    float *kz, float *data_nonuniform, spreadkernel_opts *opts) {
+//     return spreadkernel::spread_kernel(N1, N2, N3, data_uniform, M, kx, ky, kz, data_nonuniform, opts);
+// }
 }
 
 TEST_CASE("SPREADKERNEL setup spreader") {
@@ -851,9 +878,9 @@ TEST_CASE("SPREADKERNEL setup spreader") {
     CHECK(std::abs(opts.kerpoly.eval(1.2) - opts.ker(1.2, nullptr)) < opts.eps);
 }
 
-TEST_CASE("SPREADKERNEL 1d subproblem") {
+TEST_CASE_TEMPLATE("SPREADKERNEL 1d subproblem", Real, double) {
     spreadkernel_opts opts;
-    constexpr FLT machine_eps = std::numeric_limits<FLT>::epsilon();
+    constexpr Real machine_eps = std::numeric_limits<Real>::epsilon();
     const UBIGINT N1 = 100, N2 = 1, N3 = 1;
     std::fill(opts.grid_delta, opts.grid_delta + 3, 1.3);
     opts.kerevalmeth = SPREADKERNEL_EVAL_HORNER_DIRECT;
@@ -867,12 +894,12 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
     spread_kernel_init(N1, N2, N3, &opts);
     REQUIRE(opts.kerpoly.order);
 
-    constexpr auto simd_size = xsimd::simd_type<FLT>::size;
-    std::vector<FLT> outgrid_split_eval(N1), outgrid_single_eval(N1);
+    constexpr auto simd_size = xsimd::simd_type<Real>::size;
+    std::vector<Real> outgrid_split_eval(N1), outgrid_single_eval(N1);
 
     // Exact center of the kernel. On center gridpoint when nspread is odd
-    FLT test_x[]   = {0.5 * opts.nspread * opts.grid_delta[0], 1.5 * opts.nspread * opts.grid_delta[0]};
-    FLT test_str[] = {1.32, 1.32};
+    Real test_x[]   = {Real(0.5 * opts.nspread * opts.grid_delta[0]), Real(1.5 * opts.nspread * opts.grid_delta[0])};
+    Real test_str[] = {1.32, 1.32};
     // spread with no offset about center gridpoint
     spreadkernel::spread_subproblem_1d(0, N1, outgrid_split_eval.data(), 1, test_x, test_str, opts);
     // spread with nspread offset about offset center gridpoint
@@ -887,18 +914,19 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
     for (int i = 0; i < 2 * opts.nspread; i++)
         CHECK(1.0 - std::abs(outgrid_split_eval[i] / outgrid_single_eval[i]) <= 5 * machine_eps);
 
-    std::vector<FLT> outgrid_full(N1);
+    std::vector<Real> outgrid_full(N1);
     outgrid_full.reserve(N1 + simd_size);
-    spread_kernel(N1, N2, N3, outgrid_full.data(), 2, test_x, nullptr, nullptr, test_str, &opts);
-    for (int i = 0; i < 2 * opts.nspread; i++)
-        CHECK(1.0 - std::abs(outgrid_single_eval[i] / outgrid_full[i]) <= 5 * machine_eps);
+    spreadkernel::spread_kernel(N1, N2, N3, outgrid_full.data(), 2, &test_x[0], (Real *)nullptr, (Real *)nullptr,
+                                &test_str[0], &opts);
+    for (int i = 0; i < 2 * opts.nspread; ++i)
+        CHECK(outgrid_full[i] == outgrid_split_eval[i]);
 
     // Evenly spread points across the grid. First and last index should never eval
     // The rest should build the gaussian up to a constant value
     // The constant value is the sum of the kernel at nspread = 5
     // 1.0 + 2 * exp(-h^2) + 2 * exp(-4 * h^2)
-    std::vector<FLT> x_full(N1 - opts.nspread - 1);
-    std::vector<FLT> str_full(N1 - opts.nspread - 1);
+    std::vector<Real> x_full(N1 - opts.nspread - 1);
+    std::vector<Real> str_full(N1 - opts.nspread - 1);
     x_full.reserve(x_full.size() + simd_size);
     str_full.reserve(str_full.size() + simd_size);
     std::fill(outgrid_full.begin(), outgrid_full.end(), 0.0);
@@ -933,6 +961,7 @@ TEST_CASE("SPREADKERNEL 1d subproblem") {
     for (int i = 6; i < last_i - opts.nspread; ++i)
         CHECK(std::abs(outgrid_full[i] - fifth_val) <= full_tol);
 
+    CHECK(std::abs(outgrid_full[last_i]) == 0.0);
     CHECK(std::abs(outgrid_full[last_i - 1] - first_val) <= full_tol);
     CHECK(std::abs(outgrid_full[last_i - 2] - second_val) <= full_tol);
     CHECK(std::abs(outgrid_full[last_i - 3] - third_val) <= full_tol);
